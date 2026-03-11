@@ -44,6 +44,26 @@
         </div>
       </header>
 
+      <div id="alertOverlay" class="alert-overlay" hidden>
+        <div id="alertDialog" class="alert-dialog">
+          <div class="alert-dialog-head">
+            <div>
+              <span class="kicker">净值提醒</span>
+              <strong id="alertDialogTitle">净值预警</strong>
+            </div>
+            <button id="alertDialogCloseButton" class="icon-button" type="button">×</button>
+          </div>
+
+          <p id="alertDialogMessage" class="alert-dialog-message">等待提醒</p>
+          <div id="alertDialogMeta" class="alert-dialog-meta"></div>
+
+          <div class="alert-dialog-actions">
+            <button id="alertStopSoundButton" class="ghost-button" type="button">停止声音</button>
+            <button id="alertDismissButton" class="primary-button" type="button">关闭提醒</button>
+          </div>
+        </div>
+      </div>
+
       <main class="content">
         <section class="hero-card">
           <div class="status-row">
@@ -105,7 +125,7 @@
           <div id="positionsList" class="positions-list"></div>
         </section>
 
-        <footer class="footer-note">仅支持 Binance USDⓈ-M 合约 · 建议启用 IP 白名单</footer>
+        <footer class="footer-note">仅支持 Binance USDⓈ-M 合约，建议启用 IP 白名单。</footer>
       </main>
     </div>
 
@@ -152,12 +172,68 @@
           <input id="recvWindowInput" name="recvWindow" type="number" min="100" max="60000" step="100" />
         </label>
 
+        <div class="settings-section">
+          <div class="settings-section-copy">
+            <strong>净值提醒</strong>
+            <small>基于每 5 分钟净值历史触发，X 必须是 5 的倍数。</small>
+          </div>
+
+          <div class="alert-control-row">
+            <label class="toggle-inline" for="equityAlertEnabledInput">
+              <span>启用净值提醒</span>
+              <input id="equityAlertEnabledInput" name="equityAlertEnabled" type="checkbox" />
+            </label>
+
+            <button id="testAlertButton" class="ghost-button compact-button" type="button">测试提醒</button>
+
+            <label class="compact-field" for="equityAlertRepeatModeInput">
+              <span>循环次数</span>
+              <select id="equityAlertRepeatModeInput" name="equityAlertRepeatMode">
+                <option value="once">1 次</option>
+                <option value="triple">3 次</option>
+                <option value="until-closed">直到关闭</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label>
+              <span>观察窗口 X (分钟)</span>
+              <input id="equityAlertWindowInput" name="equityAlertWindowMinutes" type="number" min="5" max="1440" step="5" />
+            </label>
+
+            <label>
+              <span>波动阈值 Y (%)</span>
+              <input id="equityAlertThresholdInput" name="equityAlertThresholdPercent" type="number" min="0.1" max="100" step="0.1" />
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label>
+              <span>提醒声音</span>
+              <select id="equityAlertSoundInput" name="equityAlertSound">
+                <option value="pulse">Pulse 短促</option>
+                <option value="alarm">Alarm 短警报</option>
+                <option value="chime">Chime 短提示</option>
+                <option value="beacon">Beacon 长提示</option>
+                <option value="siren">Siren 长警报</option>
+                <option value="cascade">Cascade 长回响</option>
+              </select>
+            </label>
+
+            <label>
+              <span>音量 (0-100)</span>
+              <input id="equityAlertVolumeInput" name="equityAlertVolume" type="number" min="0" max="100" step="5" />
+            </label>
+          </div>
+        </div>
+
         <label class="toggle-row">
           <span>窗口始终置顶</span>
           <input id="alwaysOnTopInput" name="alwaysOnTop" type="checkbox" />
         </label>
 
-        <div id="formStatus" class="form-status">密钥仅保存在本机。Windows 会优先使用系统加密。</div>
+        <div id="formStatus" class="form-status">真实提醒会在新的 5 分钟采样写入后判断；测试提醒会立即弹出和播放。</div>
 
         <div class="drawer-actions">
           <button id="saveButton" class="primary-button" type="submit">保存并连接</button>

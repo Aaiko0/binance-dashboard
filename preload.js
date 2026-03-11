@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const ALERT_EVENT_CHANNEL = "alert:triggered";
+
 contextBridge.exposeInMainWorld("binancePanel", {
   getSettings: () => ipcRenderer.invoke("panel:get-settings"),
   getState: () => ipcRenderer.invoke("panel:get-state"),
@@ -25,6 +27,13 @@ contextBridge.exposeInMainWorld("binancePanel", {
     ipcRenderer.on("history:updated", listener);
     return () => {
       ipcRenderer.removeListener("history:updated", listener);
+    };
+  },
+  onEquityAlert: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(ALERT_EVENT_CHANNEL, listener);
+    return () => {
+      ipcRenderer.removeListener(ALERT_EVENT_CHANNEL, listener);
     };
   }
 });

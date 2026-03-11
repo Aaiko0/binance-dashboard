@@ -4,6 +4,7 @@ const path = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
 const { ConfigStore, sanitizeSettings } = require("./src/main/configStore");
 const { BinancePositionsService } = require("./src/main/binanceService");
+const { EquityAlertService } = require("./src/main/equityAlertService");
 const { EquityHistoryService } = require("./src/main/equityHistoryService");
 
 let mainWindow = null;
@@ -11,6 +12,7 @@ let historyWindow = null;
 let configStore = null;
 let positionsService = null;
 let equityHistoryService = null;
+let equityAlertService = null;
 
 const startupLogPath = path.join(process.env.APPDATA || os.tmpdir(), "binance-position-panel", "startup.log");
 
@@ -37,6 +39,23 @@ function broadcastSnapshot(snapshot) {
 
 function broadcastHistoryUpdate(historyPayload) {
   broadcast("history:updated", historyPayload);
+}
+
+function broadcastEquityAlert(alertPayload) {
+  broadcast("alert:triggered", alertPayload);
+}
+
+function flashMainWindowTemporarily() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.flashFrame(true);
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.flashFrame(false);
+    }
+  }, 3000);
 }
 
 function syncWindowAlwaysOnTop(alwaysOnTop) {
@@ -286,6 +305,7 @@ app.whenReady().then(async () => {
   configStore = new ConfigStore({ app, safeStorage });
   positionsService = new BinancePositionsService();
   equityHistoryService = new EquityHistoryService({ app });
+  equityAlertService = new EquityAlertService();
   equityHistoryService.start();
 
   positionsService.on("snapshot", (snapshot) => {
@@ -294,7 +314,18 @@ app.whenReady().then(async () => {
     broadcastSnapshot(snapshot);
   });
 
-  equityHistoryService.on("history-updated", broadcastHistoryUpdate);
+  equityHistoryService.on("history-updated", (historyPayload) => {
+    broadcastHistoryUpdate(historyPayload);
+
+    const settings = configStore.load();
+    const alertPayload = equityAlertService.evaluate(settings, historyPayload);
+    if (!alertPayload) {
+      return;
+    }
+
+    flashMainWindowTemporarily();
+    broadcastEquityAlert(alertPayload);
+  });
 
   registerIpc();
   createMainWindow();

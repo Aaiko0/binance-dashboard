@@ -137,9 +137,9 @@ function ensureSelectedRecord(records) {
     return null;
   }
 
-  const selected = records.find((record) => record.bucketStart === state.selectedBucketStart);
-  if (selected) {
-    return selected;
+  const selectedRecord = records.find((record) => record.bucketStart === state.selectedBucketStart);
+  if (selectedRecord) {
+    return selectedRecord;
   }
 
   const fallback = records[records.length - 1];
@@ -161,8 +161,8 @@ function renderSummary(records) {
   const selectedRecord = ensureSelectedRecord(records);
   dom.selectedPointTime.textContent = selectedRecord ? formatDateTime(selectedRecord.bucketStart) : "--";
   dom.selectedPointDetail.textContent = selectedRecord
-    ? `净值 ${formatMoney(selectedRecord.totalMarginBalance, 2)} · ${selectedRecord.positionCount} 笔持仓`
-    : "点击曲线上的点查看详情";
+    ? `净值 ${formatMoney(selectedRecord.totalMarginBalance)} · ${selectedRecord.positionCount} 笔持仓`
+    : "点击曲线查看详情";
 }
 
 function renderDelta(records) {
@@ -211,10 +211,12 @@ function renderAxes(records) {
   dom.axisYBottom.textContent = formatMoney(minValue, 2);
 
   const ticks = buildXTicks(records);
-  dom.axisXTicks.innerHTML = ticks.map((record) => `<span class="x-axis-tick">${formatAxisTime(record.bucketStart).replace("\n", "<br />")}</span>`).join("");
+  dom.axisXTicks.innerHTML = ticks
+    .map((record) => `<span class="x-axis-tick">${formatAxisTime(record.bucketStart).replace("\n", "<br />")}</span>`)
+    .join("");
 }
 
-function buildChartMarkup(records, selectedRecord) {
+function buildChartMarkup(records) {
   const width = 680;
   const height = 260;
   const padding = {
@@ -223,6 +225,7 @@ function buildChartMarkup(records, selectedRecord) {
     bottom: 18,
     left: 10
   };
+
   const values = records.map((record) => Number(record.totalMarginBalance));
   const times = records.map((record) => Number(record.bucketStart));
   const minValue = Math.min(...values);
@@ -248,19 +251,22 @@ function buildChartMarkup(records, selectedRecord) {
 
   const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
   const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(2)} ${baseY} L ${points[0].x.toFixed(2)} ${baseY} Z`;
-
-  const pointMarkup = points.map((point) => {
-    const isSelected = selectedRecord && selectedRecord.bucketStart === point.record.bucketStart;
-    return `
-      <circle class="chart-point-hit" data-bucket-start="${point.record.bucketStart}" data-point-x="${point.x.toFixed(2)}" data-point-y="${point.y.toFixed(2)}" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="12"></circle>
-      <circle class="chart-point ${isSelected ? "selected" : ""}" data-bucket-start="${point.record.bucketStart}" data-point-x="${point.x.toFixed(2)}" data-point-y="${point.y.toFixed(2)}" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${isSelected ? 4.5 : 3.5}"></circle>
-    `;
-  }).join("");
+  const hitPoints = points.map((point) => `
+    <circle
+      class="chart-point-hit"
+      data-bucket-start="${point.record.bucketStart}"
+      data-point-x="${point.x.toFixed(2)}"
+      data-point-y="${point.y.toFixed(2)}"
+      cx="${point.x.toFixed(2)}"
+      cy="${point.y.toFixed(2)}"
+      r="12"
+    ></circle>
+  `).join("");
 
   if (points.length === 1) {
     return `
       ${gridLines}
-      ${pointMarkup}
+      ${hitPoints}
     `;
   }
 
@@ -268,7 +274,7 @@ function buildChartMarkup(records, selectedRecord) {
     ${gridLines}
     <path class="chart-area" d="${areaPath}"></path>
     <path class="chart-line" d="${linePath}"></path>
-    ${pointMarkup}
+    ${hitPoints}
   `;
 }
 
@@ -278,7 +284,7 @@ function positionTooltip(selectedRecord) {
     return;
   }
 
-  const selectedPoint = dom.chartSvg.querySelector(`.chart-point.selected[data-bucket-start="${selectedRecord.bucketStart}"]`);
+  const selectedPoint = dom.chartSvg.querySelector(`.chart-point-hit[data-bucket-start="${selectedRecord.bucketStart}"]`);
   if (!selectedPoint) {
     dom.chartTooltip.hidden = true;
     return;
@@ -314,7 +320,7 @@ function renderChart(records) {
   dom.chartCanvasWrap.hidden = false;
   dom.chartEmpty.hidden = true;
   renderAxes(records);
-  dom.chartSvg.innerHTML = buildChartMarkup(records, selectedRecord);
+  dom.chartSvg.innerHTML = buildChartMarkup(records);
   positionTooltip(selectedRecord);
 }
 

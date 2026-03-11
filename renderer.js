@@ -1,6 +1,60 @@
 const DEFAULT_ACCOUNT_ALIAS = "我的币安账户";
 const POSITION_MODE_STORAGE_KEY = "binance-panel.position-mode";
 
+const ALERT_SOUND_PATTERNS = Object.freeze({
+  pulse: [
+    { frequency: 880, duration: 0.18, gain: 0.72, type: "triangle", gap: 0.04 },
+    { frequency: 1046, duration: 0.2, gain: 0.82, type: "triangle", gap: 0.06 },
+    { frequency: 1318, duration: 0.26, gain: 0.78, type: "triangle", gap: 0.05 }
+  ],
+  alarm: [
+    { frequency: 760, frequencyTo: 1120, duration: 0.28, gain: 0.86, type: "sawtooth", gap: 0.06 },
+    { frequency: 1120, frequencyTo: 760, duration: 0.28, gain: 0.86, type: "sawtooth", gap: 0.06 },
+    { frequency: 760, frequencyTo: 1120, duration: 0.3, gain: 0.9, type: "sawtooth", gap: 0.06 }
+  ],
+  chime: [
+    { frequency: 660, duration: 0.2, gain: 0.62, type: "sine", gap: 0.05 },
+    { frequency: 990, duration: 0.24, gain: 0.68, type: "sine", gap: 0.05 },
+    { frequency: 1320, duration: 0.28, gain: 0.72, type: "sine", gap: 0.06 }
+  ],
+  beacon: [
+    { frequency: 480, duration: 0.32, gain: 0.72, type: "triangle", gap: 0.08 },
+    { frequency: 720, duration: 0.32, gain: 0.78, type: "triangle", gap: 0.08 },
+    { frequency: 960, duration: 0.36, gain: 0.84, type: "triangle", gap: 0.1 },
+    { frequency: 720, duration: 0.3, gain: 0.76, type: "triangle", gap: 0.08 },
+    { frequency: 960, duration: 0.4, gain: 0.86, type: "triangle", gap: 0.12 }
+  ],
+  siren: [
+    { frequency: 540, frequencyTo: 1180, duration: 0.52, gain: 0.88, type: "sawtooth", gap: 0.08 },
+    { frequency: 1180, frequencyTo: 540, duration: 0.52, gain: 0.88, type: "sawtooth", gap: 0.08 },
+    { frequency: 540, frequencyTo: 1240, duration: 0.56, gain: 0.92, type: "sawtooth", gap: 0.08 },
+    { frequency: 1240, frequencyTo: 540, duration: 0.56, gain: 0.92, type: "sawtooth", gap: 0.12 }
+  ],
+  cascade: [
+    { frequency: 1320, duration: 0.24, gain: 0.72, type: "sine", gap: 0.05 },
+    { frequency: 1188, duration: 0.24, gain: 0.72, type: "sine", gap: 0.05 },
+    { frequency: 990, duration: 0.26, gain: 0.74, type: "sine", gap: 0.05 },
+    { frequency: 880, duration: 0.28, gain: 0.76, type: "sine", gap: 0.05 },
+    { frequency: 660, duration: 0.34, gain: 0.8, type: "sine", gap: 0.06 },
+    { frequency: 990, duration: 0.42, gain: 0.82, type: "sine", gap: 0.08 }
+  ]
+});
+
+const ALERT_REPEAT_MODE_OPTIONS = Object.freeze({
+  once: 1,
+  triple: 3,
+  "until-closed": Number.POSITIVE_INFINITY
+});
+
+const ALERT_SOUND_LABELS = Object.freeze({
+  pulse: "Pulse 短促",
+  alarm: "Alarm 短警报",
+  chime: "Chime 短提示",
+  beacon: "Beacon 长提示",
+  siren: "Siren 长警报",
+  cascade: "Cascade 长回响"
+});
+
 const dom = {
   statusBadge: document.querySelector("#statusBadge"),
   statusMeta: document.querySelector("#statusMeta"),
@@ -15,6 +69,13 @@ const dom = {
   positionsList: document.querySelector("#positionsList"),
   emptyState: document.querySelector("#emptyState"),
   errorBanner: document.querySelector("#errorBanner"),
+  alertOverlay: document.querySelector("#alertOverlay"),
+  alertDialogTitle: document.querySelector("#alertDialogTitle"),
+  alertDialogMessage: document.querySelector("#alertDialogMessage"),
+  alertDialogMeta: document.querySelector("#alertDialogMeta"),
+  alertDismissButton: document.querySelector("#alertDismissButton"),
+  alertStopSoundButton: document.querySelector("#alertStopSoundButton"),
+  alertDialogCloseButton: document.querySelector("#alertDialogCloseButton"),
   backdrop: document.querySelector("#backdrop"),
   settingsDrawer: document.querySelector("#settingsDrawer"),
   settingsForm: document.querySelector("#settingsForm"),
@@ -26,6 +87,13 @@ const dom = {
   restBaseUrlInput: document.querySelector("#restBaseUrlInput"),
   wsBaseUrlInput: document.querySelector("#wsBaseUrlInput"),
   recvWindowInput: document.querySelector("#recvWindowInput"),
+  equityAlertEnabledInput: document.querySelector("#equityAlertEnabledInput"),
+  equityAlertWindowInput: document.querySelector("#equityAlertWindowInput"),
+  equityAlertThresholdInput: document.querySelector("#equityAlertThresholdInput"),
+  equityAlertSoundInput: document.querySelector("#equityAlertSoundInput"),
+  equityAlertVolumeInput: document.querySelector("#equityAlertVolumeInput"),
+  equityAlertRepeatModeInput: document.querySelector("#equityAlertRepeatModeInput"),
+  testAlertButton: document.querySelector("#testAlertButton"),
   alwaysOnTopInput: document.querySelector("#alwaysOnTopInput"),
   historyButton: document.querySelector("#historyButton"),
   pinButton: document.querySelector("#pinButton"),
@@ -39,7 +107,12 @@ const dom = {
 
 const state = {
   latestSnapshot: null,
-  positionMode: loadPositionMode()
+  latestSettings: null,
+  positionMode: loadPositionMode(),
+  audioContext: null,
+  activePlaybackTimer: null,
+  activePlaybackNodes: new Set(),
+  activeMasterGain: null
 };
 
 function loadPositionMode() {
@@ -49,6 +122,28 @@ function loadPositionMode() {
 
 function savePositionMode(value) {
   window.localStorage.setItem(POSITION_MODE_STORAGE_KEY, value);
+}
+
+function toNumber(value, fallback = 0) {
+  const nextValue = Number(value);
+  return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function normalizeAlertWindowMinutes(value) {
+  const rounded = Math.round(toNumber(value, 15) / 5) * 5;
+  return Math.max(5, Math.min(1440, rounded || 15));
+}
+
+function normalizeAlertThreshold(value) {
+  return Math.min(100, Math.max(0.1, toNumber(value, 3)));
+}
+
+function normalizeAlertVolume(value) {
+  return Math.min(100, Math.max(0, Math.round(toNumber(value, 85))));
+}
+
+function normalizeRepeatMode(value) {
+  return ALERT_REPEAT_MODE_OPTIONS[value] ? value : "triple";
 }
 
 function formatMoney(value, digits = 2) {
@@ -72,13 +167,13 @@ function formatSigned(value, digits = 2) {
   return `${number > 0 ? "+" : ""}${formatMoney(number, digits)}`;
 }
 
-function formatPercent(value) {
+function formatPercent(value, digits = 2) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return "--";
   }
 
-  return `${number > 0 ? "+" : ""}${number.toFixed(2)}%`;
+  return `${number > 0 ? "+" : ""}${number.toFixed(digits)}%`;
 }
 
 function formatTime(value) {
@@ -151,6 +246,22 @@ function formatProtection(value, extraCount) {
   return extraCount > 0 ? `${priceLabel} +${extraCount}` : priceLabel;
 }
 
+function describeRepeatMode(repeatMode) {
+  if (repeatMode === "until-closed") {
+    return "直到手动关闭";
+  }
+
+  if (repeatMode === "triple") {
+    return "循环 3 次";
+  }
+
+  return "循环 1 次";
+}
+
+function describeSound(sound) {
+  return ALERT_SOUND_LABELS[sound] || sound;
+}
+
 function statusDescription(snapshot) {
   if (!snapshot.configured) {
     return "填入只读 API 后自动连接";
@@ -216,8 +327,8 @@ function updatePositionModeButton() {
   dom.positionModeButton.textContent = isUsdMode ? "USD" : "数量";
   dom.positionModeButton.setAttribute("aria-pressed", String(isUsdMode));
   dom.positionModeButton.title = isUsdMode
-    ? "当前显示美金价值，点击切换为币种数量"
-    : "当前显示币种数量，点击切换为美金价值";
+    ? "当前显示美元价值，点击切换为币种数量"
+    : "当前显示币种数量，点击切换为美元价值";
 }
 
 function createMetricRow(label, value) {
@@ -318,12 +429,19 @@ function renderSnapshot(snapshot) {
 }
 
 function fillForm(settings) {
+  state.latestSettings = settings;
   dom.accountAliasInput.value = settings.accountAlias || DEFAULT_ACCOUNT_ALIAS;
   dom.apiKeyInput.value = settings.apiKey || "";
   dom.apiSecretInput.value = "";
   dom.restBaseUrlInput.value = settings.restBaseUrl || "https://fapi.binance.com";
   dom.wsBaseUrlInput.value = settings.wsBaseUrl || "wss://fstream.binance.com";
   dom.recvWindowInput.value = String(settings.recvWindow || 5000);
+  dom.equityAlertEnabledInput.checked = Boolean(settings.equityAlertEnabled);
+  dom.equityAlertWindowInput.value = String(settings.equityAlertWindowMinutes || 15);
+  dom.equityAlertThresholdInput.value = String(settings.equityAlertThresholdPercent || 3);
+  dom.equityAlertSoundInput.value = settings.equityAlertSound || "beacon";
+  dom.equityAlertVolumeInput.value = String(settings.equityAlertVolume ?? 85);
+  dom.equityAlertRepeatModeInput.value = settings.equityAlertRepeatMode || "triple";
   dom.alwaysOnTopInput.checked = Boolean(settings.alwaysOnTop);
   dom.secretHint.textContent = settings.hasApiSecret
     ? "已保存 Secret，留空则保持原值。"
@@ -355,16 +473,19 @@ function togglePositionMode() {
   }
 }
 
-async function handleSave(event) {
-  event.preventDefault();
-  dom.formStatus.textContent = "正在保存并连接...";
-
+function collectFormPayload() {
   const payload = {
     accountAlias: dom.accountAliasInput.value.trim() || DEFAULT_ACCOUNT_ALIAS,
     apiKey: dom.apiKeyInput.value.trim(),
     restBaseUrl: dom.restBaseUrlInput.value.trim(),
     wsBaseUrl: dom.wsBaseUrlInput.value.trim(),
-    recvWindow: Number(dom.recvWindowInput.value) || 5000,
+    recvWindow: Math.round(Math.min(60000, Math.max(100, toNumber(dom.recvWindowInput.value, 5000)))),
+    equityAlertEnabled: dom.equityAlertEnabledInput.checked,
+    equityAlertWindowMinutes: normalizeAlertWindowMinutes(dom.equityAlertWindowInput.value),
+    equityAlertThresholdPercent: normalizeAlertThreshold(dom.equityAlertThresholdInput.value),
+    equityAlertSound: dom.equityAlertSoundInput.value || "beacon",
+    equityAlertVolume: normalizeAlertVolume(dom.equityAlertVolumeInput.value),
+    equityAlertRepeatMode: normalizeRepeatMode(dom.equityAlertRepeatModeInput.value),
     alwaysOnTop: dom.alwaysOnTopInput.checked
   };
 
@@ -373,11 +494,46 @@ async function handleSave(event) {
     payload.apiSecret = secret;
   }
 
+  return payload;
+}
+
+function buildTestAlertPayload() {
+  const payload = collectFormPayload();
+  const latestEquity = Math.max(100, toNumber(state.latestSnapshot?.totalMarginBalance, 5000));
+  const thresholdPercent = Math.max(0.1, payload.equityAlertThresholdPercent);
+  const deltaPercent = Math.max(thresholdPercent, thresholdPercent * 1.35);
+  const baselineEquity = latestEquity / (1 + (deltaPercent / 100));
+
+  dom.equityAlertWindowInput.value = String(payload.equityAlertWindowMinutes);
+  dom.equityAlertThresholdInput.value = String(payload.equityAlertThresholdPercent);
+  dom.equityAlertVolumeInput.value = String(payload.equityAlertVolume);
+
+  return {
+    accountAlias: payload.accountAlias,
+    direction: "up",
+    windowMinutes: payload.equityAlertWindowMinutes,
+    thresholdPercent,
+    delta: latestEquity - baselineEquity,
+    deltaPercent,
+    baselineEquity,
+    latestEquity,
+    sound: payload.equityAlertSound,
+    volume: payload.equityAlertVolume,
+    repeatMode: payload.equityAlertRepeatMode
+  };
+}
+
+async function handleSave(event) {
+  event.preventDefault();
+  dom.formStatus.textContent = "正在保存并连接...";
+
   try {
-    const result = await window.binancePanel.saveSettings(payload);
+    const result = await window.binancePanel.saveSettings(collectFormPayload());
     fillForm(result.settings);
     renderSnapshot(result.snapshot);
-    dom.formStatus.textContent = "已保存，正在维持数据刷新。";
+    dom.formStatus.textContent = result.settings.equityAlertEnabled
+      ? "已保存。真实提醒会在新的 5 分钟采样写入后判断，可先点测试提醒确认弹窗和声音。"
+      : "已保存，正在维持数据刷新。";
     closeDrawer();
   } catch (error) {
     dom.formStatus.textContent = error.message || "保存失败";
@@ -398,7 +554,10 @@ async function handleRefresh() {
 async function handlePinToggle() {
   const nextValue = !dom.alwaysOnTopInput.checked;
   const settings = await window.binancePanel.setAlwaysOnTop(nextValue);
-  fillForm(settings);
+  fillForm({
+    ...state.latestSettings,
+    ...settings
+  });
 }
 
 async function openEquityHistoryWindow() {
@@ -407,6 +566,170 @@ async function openEquityHistoryWindow() {
   } catch (_error) {
     return;
   }
+}
+
+function getAudioContext() {
+  if (state.audioContext) {
+    return state.audioContext;
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  state.audioContext = new AudioContextClass();
+  return state.audioContext;
+}
+
+function clearPlaybackNodes() {
+  for (const node of state.activePlaybackNodes) {
+    try {
+      if (typeof node.stop === "function") {
+        node.stop();
+      }
+    } catch (_error) {
+      continue;
+    }
+  }
+
+  state.activePlaybackNodes.clear();
+
+  if (state.activeMasterGain) {
+    try {
+      state.activeMasterGain.disconnect();
+    } catch (_error) {
+      // Ignore disconnect errors from already released nodes.
+    }
+  }
+
+  state.activeMasterGain = null;
+}
+
+function stopAlertPlayback() {
+  clearTimeout(state.activePlaybackTimer);
+  state.activePlaybackTimer = null;
+  clearPlaybackNodes();
+}
+
+function getPatternDuration(pattern) {
+  return pattern.reduce((total, note) => total + note.duration + (note.gap || 0), 0) + 0.12;
+}
+
+function playPattern(soundName, volumePercent) {
+  const context = getAudioContext();
+  if (!context || volumePercent <= 0) {
+    return;
+  }
+
+  const pattern = ALERT_SOUND_PATTERNS[soundName] || ALERT_SOUND_PATTERNS.beacon;
+  const masterGain = context.createGain();
+  masterGain.gain.value = Math.max(0, Math.min(1, volumePercent / 100)) * 0.95;
+  masterGain.connect(context.destination);
+  state.activeMasterGain = masterGain;
+
+  let cursor = context.currentTime + 0.01;
+
+  for (const note of pattern) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = note.type || "triangle";
+    oscillator.frequency.setValueAtTime(note.frequency, cursor);
+    if (note.frequencyTo) {
+      oscillator.frequency.linearRampToValueAtTime(note.frequencyTo, cursor + note.duration);
+    }
+
+    gain.gain.setValueAtTime(0.0001, cursor);
+    gain.gain.exponentialRampToValueAtTime(note.gain || 0.8, cursor + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, cursor + note.duration);
+
+    oscillator.connect(gain);
+    gain.connect(masterGain);
+
+    oscillator.onended = () => {
+      state.activePlaybackNodes.delete(oscillator);
+      state.activePlaybackNodes.delete(gain);
+    };
+
+    state.activePlaybackNodes.add(oscillator);
+    state.activePlaybackNodes.add(gain);
+
+    oscillator.start(cursor);
+    oscillator.stop(cursor + note.duration + 0.05);
+    cursor += note.duration + (note.gap || 0.05);
+  }
+
+  window.setTimeout(() => {
+    if (state.activeMasterGain === masterGain) {
+      try {
+        masterGain.disconnect();
+      } catch (_error) {
+        return;
+      }
+    }
+  }, Math.ceil((cursor - context.currentTime + 0.2) * 1000));
+}
+
+async function startAlertPlayback({ sound, volume, repeatMode }) {
+  stopAlertPlayback();
+
+  const context = getAudioContext();
+  if (!context || volume <= 0) {
+    return;
+  }
+
+  if (context.state === "suspended") {
+    await context.resume();
+  }
+
+  const pattern = ALERT_SOUND_PATTERNS[sound] || ALERT_SOUND_PATTERNS.beacon;
+  const maxCycles = ALERT_REPEAT_MODE_OPTIONS[normalizeRepeatMode(repeatMode)];
+  const patternDurationMs = Math.ceil(getPatternDuration(pattern) * 1000) + 180;
+  let currentCycle = 0;
+
+  const loop = () => {
+    playPattern(sound, volume);
+    currentCycle += 1;
+
+    if (Number.isFinite(maxCycles) && currentCycle >= maxCycles) {
+      state.activePlaybackTimer = null;
+      return;
+    }
+
+    state.activePlaybackTimer = window.setTimeout(loop, patternDurationMs);
+  };
+
+  loop();
+}
+
+function openAlertDialog(alert) {
+  const directionLabel = alert.direction === "up" ? "上冲" : "回撤";
+  dom.alertDialogTitle.textContent = `净值${directionLabel}预警`;
+  dom.alertDialogMessage.textContent = `${alert.windowMinutes} 分钟内 ${formatPercent(alert.deltaPercent)}，净值 ${formatMoney(alert.baselineEquity)} → ${formatMoney(alert.latestEquity)}`;
+  dom.alertDialogMeta.textContent = `声音：${describeSound(alert.sound)} · 音量：${alert.volume} · ${describeRepeatMode(alert.repeatMode)}`;
+  dom.alertOverlay.hidden = false;
+}
+
+function closeAlertDialog() {
+  dom.alertOverlay.hidden = true;
+  stopAlertPlayback();
+}
+
+async function handleEquityAlert(alert) {
+  openAlertDialog(alert);
+
+  try {
+    await startAlertPlayback(alert);
+  } catch (_error) {
+    return;
+  }
+}
+
+async function handleTestAlert() {
+  const testPayload = buildTestAlertPayload();
+  await handleEquityAlert(testPayload);
+  dom.formStatus.textContent = "测试提醒已触发。真实提醒会在新的 5 分钟采样写入后按规则判断。";
 }
 
 function bindEvents() {
@@ -418,18 +741,33 @@ function bindEvents() {
   dom.settingsForm.addEventListener("submit", handleSave);
   dom.refreshButton.addEventListener("click", handleRefresh);
   dom.pinButton.addEventListener("click", handlePinToggle);
+  dom.testAlertButton.addEventListener("click", handleTestAlert);
   dom.positionModeButton.addEventListener("click", togglePositionMode);
   dom.positionsList.addEventListener("click", (event) => {
     if (event.target.closest(".size-toggle")) {
       togglePositionMode();
     }
   });
+  dom.alertDismissButton.addEventListener("click", closeAlertDialog);
+  dom.alertStopSoundButton.addEventListener("click", stopAlertPlayback);
+  dom.alertDialogCloseButton.addEventListener("click", closeAlertDialog);
+  dom.alertOverlay.addEventListener("click", (event) => {
+    if (event.target === dom.alertOverlay) {
+      closeAlertDialog();
+    }
+  });
   dom.minimizeButton.addEventListener("click", () => window.binancePanel.minimizeWindow());
   dom.closeButton.addEventListener("click", () => window.binancePanel.quitApp());
 }
 
+function bindSubscriptions() {
+  window.binancePanel.onSnapshot(renderSnapshot);
+  window.binancePanel.onEquityAlert(handleEquityAlert);
+}
+
 async function bootstrap() {
   bindEvents();
+  bindSubscriptions();
 
   const [settings, snapshot] = await Promise.all([
     window.binancePanel.getSettings(),
@@ -438,7 +776,6 @@ async function bootstrap() {
 
   fillForm(settings);
   renderSnapshot(snapshot);
-  window.binancePanel.onSnapshot(renderSnapshot);
 }
 
 bootstrap();

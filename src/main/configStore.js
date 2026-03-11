@@ -2,9 +2,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const DEFAULT_ACCOUNT_ALIAS = "我的币安账户";
+const ALERT_SOUND_OPTIONS = ["pulse", "alarm", "chime", "beacon", "siren", "cascade"];
+const ALERT_REPEAT_OPTIONS = ["once", "triple", "until-closed"];
 const LEGACY_ALIAS_MAP = new Map([
-  ["鎴戠殑甯佸畨璐︽埛", DEFAULT_ACCOUNT_ALIAS],
-  ["閹存垹娈戠敮浣哥暔鐠愶附鍩?", DEFAULT_ACCOUNT_ALIAS]
+  ["閹存垹娈戠敮浣哥暔鐠愶附鍩?", DEFAULT_ACCOUNT_ALIAS],
+  ["闁瑰瓨鍨瑰▓鎴犳暜娴ｅ摜鏆旈悹鎰堕檮閸?", DEFAULT_ACCOUNT_ALIAS]
 ]);
 
 const DEFAULT_SETTINGS = {
@@ -14,8 +16,23 @@ const DEFAULT_SETTINGS = {
   restBaseUrl: "https://fapi.binance.com",
   wsBaseUrl: "wss://fstream.binance.com",
   alwaysOnTop: true,
-  recvWindow: 5000
+  recvWindow: 5000,
+  equityAlertEnabled: false,
+  equityAlertWindowMinutes: 15,
+  equityAlertThresholdPercent: 3,
+  equityAlertSound: "beacon",
+  equityAlertVolume: 85,
+  equityAlertRepeatMode: "triple"
 };
+
+function clampNumber(value, { min, max, fallback }) {
+  const nextValue = Number(value);
+  if (!Number.isFinite(nextValue)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, nextValue));
+}
 
 function normalizeBaseUrl(value, fallback) {
   const nextValue = String(value || fallback).trim() || fallback;
@@ -31,6 +48,42 @@ function normalizeAccountAlias(value) {
   return LEGACY_ALIAS_MAP.get(nextValue) || nextValue;
 }
 
+function normalizeAlertWindowMinutes(value) {
+  const clamped = clampNumber(value, {
+    min: 5,
+    max: 1440,
+    fallback: DEFAULT_SETTINGS.equityAlertWindowMinutes
+  });
+
+  return Math.max(5, Math.round(clamped / 5) * 5);
+}
+
+function normalizeAlertThresholdPercent(value) {
+  return clampNumber(value, {
+    min: 0.1,
+    max: 100,
+    fallback: DEFAULT_SETTINGS.equityAlertThresholdPercent
+  });
+}
+
+function normalizeAlertSound(value) {
+  const nextValue = String(value || "").trim().toLowerCase();
+  return ALERT_SOUND_OPTIONS.includes(nextValue) ? nextValue : DEFAULT_SETTINGS.equityAlertSound;
+}
+
+function normalizeAlertVolume(value) {
+  return Math.round(clampNumber(value, {
+    min: 0,
+    max: 100,
+    fallback: DEFAULT_SETTINGS.equityAlertVolume
+  }));
+}
+
+function normalizeAlertRepeatMode(value) {
+  const nextValue = String(value || "").trim().toLowerCase();
+  return ALERT_REPEAT_OPTIONS.includes(nextValue) ? nextValue : DEFAULT_SETTINGS.equityAlertRepeatMode;
+}
+
 function normalizeSettings(raw = {}) {
   return {
     accountAlias: normalizeAccountAlias(raw.accountAlias || DEFAULT_SETTINGS.accountAlias),
@@ -39,9 +92,17 @@ function normalizeSettings(raw = {}) {
     restBaseUrl: normalizeBaseUrl(raw.restBaseUrl, DEFAULT_SETTINGS.restBaseUrl),
     wsBaseUrl: normalizeBaseUrl(raw.wsBaseUrl, DEFAULT_SETTINGS.wsBaseUrl),
     alwaysOnTop: raw.alwaysOnTop === undefined ? DEFAULT_SETTINGS.alwaysOnTop : Boolean(raw.alwaysOnTop),
-    recvWindow: Number.isFinite(Number(raw.recvWindow))
-      ? Math.max(100, Math.min(60000, Number(raw.recvWindow)))
-      : DEFAULT_SETTINGS.recvWindow
+    recvWindow: Math.round(clampNumber(raw.recvWindow, {
+      min: 100,
+      max: 60000,
+      fallback: DEFAULT_SETTINGS.recvWindow
+    })),
+    equityAlertEnabled: Boolean(raw.equityAlertEnabled),
+    equityAlertWindowMinutes: normalizeAlertWindowMinutes(raw.equityAlertWindowMinutes),
+    equityAlertThresholdPercent: normalizeAlertThresholdPercent(raw.equityAlertThresholdPercent),
+    equityAlertSound: normalizeAlertSound(raw.equityAlertSound),
+    equityAlertVolume: normalizeAlertVolume(raw.equityAlertVolume),
+    equityAlertRepeatMode: normalizeAlertRepeatMode(raw.equityAlertRepeatMode)
   };
 }
 
@@ -53,7 +114,13 @@ function sanitizeSettings(settings) {
     restBaseUrl: settings.restBaseUrl,
     wsBaseUrl: settings.wsBaseUrl,
     alwaysOnTop: settings.alwaysOnTop,
-    recvWindow: settings.recvWindow
+    recvWindow: settings.recvWindow,
+    equityAlertEnabled: settings.equityAlertEnabled,
+    equityAlertWindowMinutes: settings.equityAlertWindowMinutes,
+    equityAlertThresholdPercent: settings.equityAlertThresholdPercent,
+    equityAlertSound: settings.equityAlertSound,
+    equityAlertVolume: settings.equityAlertVolume,
+    equityAlertRepeatMode: settings.equityAlertRepeatMode
   };
 }
 
@@ -106,9 +173,7 @@ class ConfigStore {
 
   save(partial) {
     const current = this.load();
-    const next = {
-      ...current
-    };
+    const next = { ...current };
 
     if (Object.prototype.hasOwnProperty.call(partial, "accountAlias")) {
       next.accountAlias = partial.accountAlias;
@@ -138,6 +203,30 @@ class ConfigStore {
       next.recvWindow = partial.recvWindow;
     }
 
+    if (Object.prototype.hasOwnProperty.call(partial, "equityAlertEnabled")) {
+      next.equityAlertEnabled = partial.equityAlertEnabled;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(partial, "equityAlertWindowMinutes")) {
+      next.equityAlertWindowMinutes = partial.equityAlertWindowMinutes;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(partial, "equityAlertThresholdPercent")) {
+      next.equityAlertThresholdPercent = partial.equityAlertThresholdPercent;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(partial, "equityAlertSound")) {
+      next.equityAlertSound = partial.equityAlertSound;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(partial, "equityAlertVolume")) {
+      next.equityAlertVolume = partial.equityAlertVolume;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(partial, "equityAlertRepeatMode")) {
+      next.equityAlertRepeatMode = partial.equityAlertRepeatMode;
+    }
+
     this.cache = normalizeSettings(next);
     this.#persist(this.cache);
     return { ...this.cache };
@@ -153,7 +242,13 @@ class ConfigStore {
       restBaseUrl: settings.restBaseUrl,
       wsBaseUrl: settings.wsBaseUrl,
       alwaysOnTop: settings.alwaysOnTop,
-      recvWindow: settings.recvWindow
+      recvWindow: settings.recvWindow,
+      equityAlertEnabled: settings.equityAlertEnabled,
+      equityAlertWindowMinutes: settings.equityAlertWindowMinutes,
+      equityAlertThresholdPercent: settings.equityAlertThresholdPercent,
+      equityAlertSound: settings.equityAlertSound,
+      equityAlertVolume: settings.equityAlertVolume,
+      equityAlertRepeatMode: settings.equityAlertRepeatMode
     };
 
     if (settings.apiSecret) {
@@ -181,6 +276,8 @@ class ConfigStore {
 }
 
 module.exports = {
+  ALERT_REPEAT_OPTIONS,
+  ALERT_SOUND_OPTIONS,
   ConfigStore,
   DEFAULT_SETTINGS,
   sanitizeSettings
