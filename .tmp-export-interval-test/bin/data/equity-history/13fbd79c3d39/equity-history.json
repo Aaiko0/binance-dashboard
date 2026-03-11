@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "accountId": "13fbd79c3d39",
+  "accountAlias": "??",
+  "sampleIntervalMinutes": 5,
+  "records": [
+    {
+      "bucketStart": 1773100800000,
+      "recordedAt": "2026-03-10T00:00:00.000Z",
+      "totalMarginBalance": 100,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773101100000,
+      "recordedAt": "2026-03-10T00:05:00.000Z",
+      "totalMarginBalance": 101,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773101400000,
+      "recordedAt": "2026-03-10T00:10:00.000Z",
+      "totalMarginBalance": 102,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773101700000,
+      "recordedAt": "2026-03-10T00:15:00.000Z",
+      "totalMarginBalance": 103,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773102000000,
+      "recordedAt": "2026-03-10T00:20:00.000Z",
+      "totalMarginBalance": 104,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773102300000,
+      "recordedAt": "2026-03-10T00:25:00.000Z",
+      "totalMarginBalance": 105,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773102600000,
+      "recordedAt": "2026-03-10T00:30:00.000Z",
+      "totalMarginBalance": 106,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773102900000,
+      "recordedAt": "2026-03-10T00:35:00.000Z",
+      "totalMarginBalance": 107,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    }
+  ]
+}

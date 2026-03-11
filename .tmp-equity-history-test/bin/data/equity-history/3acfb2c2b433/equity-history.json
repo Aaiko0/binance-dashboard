@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "accountId": "3acfb2c2b433",
+  "accountAlias": "????",
+  "sampleIntervalMinutes": 5,
+  "records": [
+    {
+      "bucketStart": 1773100800000,
+      "recordedAt": "2026-03-10T00:04:58.000Z",
+      "totalMarginBalance": 102,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 1
+    },
+    {
+      "bucketStart": 1773101100000,
+      "recordedAt": "2026-03-10T00:05:01.000Z",
+      "totalMarginBalance": 110,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 2
+    },
+    {
+      "bucketStart": 1773101700000,
+      "recordedAt": "2026-03-10T00:15:01.000Z",
+      "totalMarginBalance": 118,
+      "walletBalance": 90,
+      "availableBalance": 80,
+      "totalUnrealizedProfit": 10,
+      "positionCount": 2
+    }
+  ]
+}

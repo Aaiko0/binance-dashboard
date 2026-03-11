@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>币安持仓便签</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar">
+        <div class="title-copy">
+          <span class="eyebrow">USDⓈ-M FUTURES</span>
+          <div class="title-line">
+            <h1>持仓便签</h1>
+            <button
+              id="historyButton"
+              class="chrome-button icon-toggle trend-toggle"
+              type="button"
+              title="查看净值走势"
+              aria-label="查看净值走势"
+            >
+              <span class="trend-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="title-actions">
+          <button
+            id="pinButton"
+            class="chrome-button icon-toggle"
+            type="button"
+            title="窗口置顶"
+            aria-label="窗口置顶"
+            aria-pressed="true"
+          >
+            <span class="pin-icon" aria-hidden="true"></span>
+          </button>
+          <button id="refreshButton" class="chrome-button" type="button">刷新</button>
+          <button id="settingsButton" class="chrome-button" type="button">API</button>
+          <button id="minimizeButton" class="chrome-button small" type="button">_</button>
+          <button id="closeButton" class="chrome-button small danger" type="button">×</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="hero-card">
+          <div class="status-row">
+            <span id="statusBadge" class="status-badge idle">等待配置</span>
+            <span id="statusMeta" class="status-meta">填入只读 API 后自动连接</span>
+          </div>
+
+          <div class="headline-row">
+            <div>
+              <p class="kicker">账户</p>
+              <strong id="accountAlias">我的币安账户</strong>
+            </div>
+            <div class="live-chip">
+              <span class="chip-label">最近更新</span>
+              <strong id="updatedAt">未连接</strong>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <article class="metric-card">
+              <span class="metric-label">总权益</span>
+              <strong id="metricMarginBalance" class="metric-value">--</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">钱包余额</span>
+              <strong id="metricWalletBalance" class="metric-value">--</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">可用余额</span>
+              <strong id="metricAvailableBalance" class="metric-value">--</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">总浮盈亏</span>
+              <strong id="metricUnrealized" class="metric-value">--</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="positions-panel">
+          <div class="section-head">
+            <div>
+              <p class="kicker">仓位</p>
+              <h2>当前持仓</h2>
+            </div>
+
+            <div class="section-actions">
+              <button id="positionModeButton" class="mode-toggle" type="button" title="切换显示模式">数量</button>
+              <span id="positionCount" class="count-pill">0</span>
+            </div>
+          </div>
+
+          <div id="errorBanner" class="error-banner" hidden></div>
+
+          <div id="emptyState" class="empty-state">
+            <strong>还没有活动持仓</strong>
+            <p>连接后，这里会显示你的持仓、盈亏和止盈止损。</p>
+          </div>
+
+          <div id="positionsList" class="positions-list"></div>
+        </section>
+
+        <footer class="footer-note">仅支持 Binance USDⓈ-M 合约 · 建议启用 IP 白名单</footer>
+      </main>
+    </div>
+
+    <div id="backdrop" class="backdrop" hidden></div>
+
+    <aside id="settingsDrawer" class="settings-drawer" hidden>
+      <div class="drawer-head">
+        <div>
+          <p class="kicker">本地配置</p>
+          <h3>账户 API</h3>
+        </div>
+        <button id="drawerCloseButton" class="icon-button" type="button">×</button>
+      </div>
+
+      <form id="settingsForm" class="settings-form">
+        <label>
+          <span>账户名称</span>
+          <input id="accountAliasInput" name="accountAlias" type="text" maxlength="32" />
+        </label>
+
+        <label>
+          <span>API Key</span>
+          <input id="apiKeyInput" name="apiKey" type="text" autocomplete="off" />
+        </label>
+
+        <label>
+          <span>API Secret</span>
+          <input id="apiSecretInput" name="apiSecret" type="password" autocomplete="new-password" />
+          <small id="secretHint" class="hint">留空则保持当前已保存的 Secret。</small>
+        </label>
+
+        <label>
+          <span>REST Base URL</span>
+          <input id="restBaseUrlInput" name="restBaseUrl" type="url" />
+        </label>
+
+        <label>
+          <span>WebSocket Base URL</span>
+          <input id="wsBaseUrlInput" name="wsBaseUrl" type="url" />
+        </label>
+
+        <label>
+          <span>recvWindow (ms)</span>
+          <input id="recvWindowInput" name="recvWindow" type="number" min="100" max="60000" step="100" />
+        </label>
+
+        <label class="toggle-row">
+          <span>窗口始终置顶</span>
+          <input id="alwaysOnTopInput" name="alwaysOnTop" type="checkbox" />
+        </label>
+
+        <div id="formStatus" class="form-status">密钥仅保存在本机。Windows 会优先使用系统加密。</div>
+
+        <div class="drawer-actions">
+          <button id="saveButton" class="primary-button" type="submit">保存并连接</button>
+          <button id="cancelButton" class="ghost-button" type="button">取消</button>
+        </div>
+      </form>
+    </aside>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

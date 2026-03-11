@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>净值走势</title>
+    <link rel="stylesheet" href="./equity-history.css" />
+  </head>
+  <body>
+    <div class="window-shell">
+      <header class="window-header">
+        <div class="window-copy">
+          <span class="eyebrow">ACCOUNT EQUITY</span>
+          <div class="title-row">
+            <h1>净值走势</h1>
+            <span class="title-badge">固定 5 分钟采样</span>
+          </div>
+        </div>
+
+        <div class="window-actions">
+          <button id="refreshButton" class="header-button" type="button">刷新</button>
+          <button id="openFolderButton" class="header-button" type="button">目录</button>
+          <button id="minimizeButton" class="header-button small" type="button">_</button>
+          <button id="closeButton" class="header-button small danger" type="button">×</button>
+        </div>
+      </header>
+
+      <main class="window-content">
+        <section class="summary-grid">
+          <article class="summary-card">
+            <span class="summary-label">当前净值</span>
+            <strong id="currentEquity">--</strong>
+          </article>
+        </section>
+
+        <section class="toolbar">
+          <div class="range-group" id="rangeGroup">
+            <button class="range-button active" data-range="24h" type="button">24H</button>
+            <button class="range-button" data-range="7d" type="button">7D</button>
+            <button class="range-button" data-range="30d" type="button">30D</button>
+            <button class="range-button" data-range="all" type="button">全部</button>
+          </div>
+
+          <div class="export-group">
+            <label class="export-label" for="exportIntervalInput">导出间隔</label>
+            <input id="exportIntervalInput" type="number" min="5" step="5" list="exportIntervalOptions" value="15" />
+            <datalist id="exportIntervalOptions">
+              <option value="5"></option>
+              <option value="10"></option>
+              <option value="15"></option>
+              <option value="20"></option>
+              <option value="30"></option>
+              <option value="60"></option>
+              <option value="120"></option>
+            </datalist>
+            <button id="exportButton" class="primary-button" type="button">导出 CSV</button>
+          </div>
+        </section>
+
+        <section class="chart-panel">
+          <div class="chart-meta">
+            <div>
+              <span class="meta-label">区间变化</span>
+              <strong id="rangeDelta">--</strong>
+            </div>
+            <div class="meta-right">
+              <span class="meta-label">存储位置</span>
+              <strong id="storagePath">--</strong>
+            </div>
+          </div>
+
+          <div id="chartEmpty" class="chart-empty" hidden>
+            <strong>还没有净值历史点</strong>
+            <p id="chartEmptyHint">应用会在下一个 5 分钟节点自动写入净值。</p>
+          </div>
+
+          <div id="chartCanvasWrap" class="chart-canvas-wrap" hidden>
+            <div class="chart-body">
+              <div class="y-axis">
+                <span class="axis-title vertical">净值 USDT</span>
+                <span id="axisYTop" class="axis-tick">--</span>
+                <span id="axisYMid" class="axis-tick">--</span>
+                <span id="axisYBottom" class="axis-tick">--</span>
+              </div>
+
+              <div class="chart-main">
+                <div class="chart-stage">
+                  <div id="chartTooltip" class="chart-tooltip" hidden>
+                    <strong id="selectedPointTime">--</strong>
+                    <span id="selectedPointDetail">点击曲线上的点查看详情</span>
+                  </div>
+                  <svg id="chartSvg" viewBox="0 0 680 260" preserveAspectRatio="none"></svg>
+                </div>
+
+                <div class="x-axis">
+                  <span class="axis-title">时间</span>
+                  <div id="axisXTicks" class="x-axis-ticks"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="records-panel">
+          <div class="records-head">
+            <span>最近采样</span>
+            <span id="recordCountHint">0 条</span>
+          </div>
+          <div id="recordsList" class="records-list"></div>
+        </section>
+
+        <div id="statusMessage" class="status-message">准备就绪</div>
+      </main>
+    </div>
+
+    <script src="./equity-history.js"></script>
+  </body>
+</html>
