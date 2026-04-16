@@ -27,18 +27,29 @@
       </header>
 
       <main class="window-content">
+        <section id="metricGroup" class="metric-group" aria-label="图表指标">
+          <button class="metric-button active" data-metric="totalReturn" type="button">总收益率</button>
+          <button class="metric-button" data-metric="accountAsset" type="button">账户资产</button>
+          <button class="metric-button" data-metric="cumulativeProfit" type="button">累计收益</button>
+          <button class="metric-button" data-metric="monthlyReturn" type="button">月收益率</button>
+        </section>
+
         <section class="summary-grid">
           <article class="summary-card">
-            <span class="summary-label">当前净值</span>
-            <strong id="currentEquity">--</strong>
+            <span id="summaryLabel" class="summary-label">当前资产</span>
+            <strong id="summaryValue">--</strong>
+            <span id="summaryDetail" class="summary-detail">按 5 分钟净值历史和当前快照计算。</span>
           </article>
         </section>
 
         <section class="toolbar">
           <div class="range-group" id="rangeGroup">
-            <button class="range-button active" data-range="24h" type="button">24H</button>
+            <button class="range-button" data-range="24h" type="button">24H</button>
             <button class="range-button" data-range="7d" type="button">7D</button>
-            <button class="range-button" data-range="30d" type="button">30D</button>
+            <button class="range-button active" data-range="30d" type="button">30D</button>
+            <button class="range-button" data-range="90d" type="button">90D</button>
+            <button class="range-button" data-range="180d" type="button">180D</button>
+            <button class="range-button" data-range="1y" type="button">1Y</button>
             <button class="range-button" data-range="all" type="button">全部</button>
           </div>
 
@@ -78,7 +89,7 @@
           <div id="chartCanvasWrap" class="chart-canvas-wrap" hidden>
             <div class="chart-body">
               <div class="y-axis">
-                <span class="axis-title vertical">净值 USDT</span>
+                <span id="axisYTitle" class="axis-title vertical">资产 USDT</span>
                 <span id="axisYTop" class="axis-tick">--</span>
                 <span id="axisYMid" class="axis-tick">--</span>
                 <span id="axisYBottom" class="axis-tick">--</span>

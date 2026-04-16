@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("binancePanel", {
   platform: "electron",
   capabilities,
   getSettings: () => ipcRenderer.invoke("panel:get-settings"),
+  getDefaultSettings: () => ipcRenderer.invoke("panel:get-default-settings"),
   getState: () => ipcRenderer.invoke("panel:get-state"),
   saveSettings: (payload) => ipcRenderer.invoke("panel:save-settings", payload),
   refresh: () => ipcRenderer.invoke("panel:refresh"),

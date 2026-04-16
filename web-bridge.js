@@ -96,6 +96,9 @@
       getSettings() {
         return requestJson("/api/settings");
       },
+      getDefaultSettings() {
+        return requestJson("/api/settings/defaults");
+      },
       getState() {
         return requestJson("/api/state");
       },

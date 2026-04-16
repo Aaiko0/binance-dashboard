@@ -194,6 +194,7 @@ async function openEquityHistoryFolder() {
 
 function registerIpc() {
   ipcMain.handle("panel:get-settings", () => runtime.getSettings());
+  ipcMain.handle("panel:get-default-settings", () => runtime.getDefaultSettings());
   ipcMain.handle("panel:get-state", () => runtime.getSnapshot());
   ipcMain.handle("panel:save-settings", async (_event, payload) => {
     const result = await runtime.saveSettings(payload);

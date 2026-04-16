@@ -66,6 +66,8 @@ const dom = {
   metricWalletBalance: document.querySelector("#metricWalletBalance"),
   metricAvailableBalance: document.querySelector("#metricAvailableBalance"),
   metricUnrealized: document.querySelector("#metricUnrealized"),
+  webHistoryPanel: document.querySelector("#webHistoryPanel"),
+  webHistoryFrame: document.querySelector("#webHistoryFrame"),
   positionCount: document.querySelector("#positionCount"),
   positionModeButton: document.querySelector("#positionModeButton"),
   positionsList: document.querySelector("#positionsList"),
@@ -102,6 +104,7 @@ const dom = {
   minimizeButton: document.querySelector("#minimizeButton"),
   closeButton: document.querySelector("#closeButton"),
   drawerCloseButton: document.querySelector("#drawerCloseButton"),
+  resetDefaultsButton: document.querySelector("#resetDefaultsButton"),
   cancelButton: document.querySelector("#cancelButton"),
   testAlertButton: document.querySelector("#testAlertButton"),
   backdrop: document.querySelector("#backdrop"),
@@ -109,6 +112,7 @@ const dom = {
 };
 
 const state = {
+  defaultSettings: null,
   latestSettings: null,
   latestSnapshot: null,
   positionMode: loadPositionMode(),
@@ -461,6 +465,46 @@ function fillForm(settings) {
   dom.pinButton.title = settings.alwaysOnTop ? "取消窗口置顶" : "窗口置顶";
 }
 
+function restoreDefaultFormValues() {
+  if (!state.defaultSettings) {
+    return;
+  }
+
+  fillForm(state.defaultSettings);
+  dom.formStatus.textContent = "已恢复默认设置，点击保存并连接后生效。";
+}
+
+function resolveWebApiOrigin() {
+  if (window.BINANCE_PANEL_API_ORIGIN) {
+    return String(window.BINANCE_PANEL_API_ORIGIN).replace(/\/+$/, "");
+  }
+
+  const currentUrl = new URL(window.location.href);
+  const queryOrigin = currentUrl.searchParams.get("apiOrigin");
+  if (queryOrigin) {
+    return queryOrigin.replace(/\/+$/, "");
+  }
+
+  if (window.location.protocol === "file:") {
+    return "http://127.0.0.1:4580";
+  }
+
+  return window.location.origin.replace(/\/+$/, "");
+}
+
+function mountWebHistoryPanel() {
+  if (bridge.platform !== "web" || !dom.webHistoryPanel || !dom.webHistoryFrame) {
+    return;
+  }
+
+  const apiOrigin = resolveWebApiOrigin();
+  const frameUrl = new URL("/equity-history.html", apiOrigin);
+  frameUrl.searchParams.set("embed", "1");
+  frameUrl.searchParams.set("apiOrigin", apiOrigin);
+  dom.webHistoryPanel.hidden = false;
+  dom.webHistoryFrame.src = frameUrl.toString();
+}
+
 function openDrawer() {
   dom.backdrop.hidden = false;
   dom.settingsDrawer.hidden = false;
@@ -743,7 +787,19 @@ async function handleTestAlert() {
 function applyCapabilities() {
   const capabilities = bridge.capabilities || {};
   document.documentElement.dataset.platform = bridge.platform || "electron";
-  document.body.classList.toggle("web-mode", bridge.platform === "web");
+  const isWebPlatform = bridge.platform === "web";
+  document.body.classList.toggle("web-mode", isWebPlatform);
+
+  if (dom.webHistoryPanel) {
+    if (isWebPlatform) {
+      mountWebHistoryPanel();
+    } else {
+      dom.webHistoryPanel.hidden = true;
+      if (dom.webHistoryFrame) {
+        dom.webHistoryFrame.removeAttribute("src");
+      }
+    }
+  }
 
   if (!capabilities.windowControls) {
     dom.minimizeButton.hidden = true;
@@ -761,6 +817,7 @@ function bindEvents() {
   dom.historyButton.addEventListener("click", openEquityHistoryWindow);
   dom.settingsButton.addEventListener("click", openDrawer);
   dom.drawerCloseButton.addEventListener("click", closeDrawer);
+  dom.resetDefaultsButton.addEventListener("click", restoreDefaultFormValues);
   dom.cancelButton.addEventListener("click", closeDrawer);
   dom.backdrop.addEventListener("click", closeDrawer);
   dom.settingsForm.addEventListener("submit", handleSave);
@@ -799,11 +856,13 @@ async function bootstrap() {
   bindEvents();
   bindSubscriptions();
 
-  const [settings, snapshot] = await Promise.all([
+  const [defaultSettings, settings, snapshot] = await Promise.all([
+    bridge.getDefaultSettings(),
     bridge.getSettings(),
     bridge.getState()
   ]);
 
+  state.defaultSettings = defaultSettings;
   fillForm(settings);
   renderSnapshot(snapshot);
   updatePositionModeButton();

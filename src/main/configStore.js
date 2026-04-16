@@ -124,6 +124,12 @@ function sanitizeSettings(settings) {
   };
 }
 
+function buildDefaultSettings() {
+  return normalizeSettings({
+    ...DEFAULT_SETTINGS
+  });
+}
+
 function parseSettingsFile(filePath) {
   const rawText = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
   return JSON.parse(rawText);
@@ -278,6 +284,7 @@ class ConfigStore {
 module.exports = {
   ALERT_REPEAT_OPTIONS,
   ALERT_SOUND_OPTIONS,
+  buildDefaultSettings,
   ConfigStore,
   DEFAULT_SETTINGS,
   sanitizeSettings

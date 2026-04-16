@@ -150,6 +150,11 @@ function createWebServer({ runtime, rootDirectory }) {
         return;
       }
 
+      if (requestUrl.pathname === "/api/settings/defaults" && request.method === "GET") {
+        sendJson(response, 200, runtime.getDefaultSettings());
+        return;
+      }
+
       if (requestUrl.pathname === "/api/settings" && request.method === "POST") {
         const payload = await readBody(request);
         sendJson(response, 200, await runtime.saveSettings(payload));

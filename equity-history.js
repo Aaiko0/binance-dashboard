@@ -1,10 +1,64 @@
 const RANGE_STORAGE_KEY = "binance-panel.history-range";
+const METRIC_STORAGE_KEY = "binance-panel.history-metric";
 const EXPORT_INTERVAL_STORAGE_KEY = "binance-panel.export-interval";
 
+const RANGE_WINDOW_MS = Object.freeze({
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+  "90d": 90 * 24 * 60 * 60 * 1000,
+  "180d": 180 * 24 * 60 * 60 * 1000,
+  "1y": 365 * 24 * 60 * 60 * 1000,
+  all: Number.POSITIVE_INFINITY
+});
+
+const METRIC_DEFINITIONS = Object.freeze({
+  totalReturn: {
+    label: "总收益率",
+    summaryLabel: "当前总收益率",
+    summaryDetail: "相对首条净值记录计算。",
+    axisTitle: "收益率 %",
+    kind: "percent",
+    useSignedSummary: true
+  },
+  accountAsset: {
+    label: "账户资产",
+    summaryLabel: "当前账户资产",
+    summaryDetail: "按账户总权益显示。",
+    axisTitle: "资产 USDT",
+    kind: "money",
+    useSignedSummary: false
+  },
+  cumulativeProfit: {
+    label: "累计收益",
+    summaryLabel: "当前累计收益",
+    summaryDetail: "相对首条净值记录计算。",
+    axisTitle: "收益 USDT",
+    kind: "money",
+    useSignedSummary: true
+  },
+  monthlyReturn: {
+    label: "月收益率",
+    summaryLabel: "当前月收益率",
+    summaryDetail: "按自然月首条净值记录计算。",
+    axisTitle: "月收益率 %",
+    kind: "percent",
+    useSignedSummary: true
+  }
+});
+
+const DEFAULT_RANGE = "30d";
+const DEFAULT_METRIC = "accountAsset";
+
 const bridge = window.binancePanel;
+const urlParams = new URLSearchParams(window.location.search);
+const isEmbedded = urlParams.get("embed") === "1";
 
 const dom = {
-  currentEquity: document.querySelector("#currentEquity"),
+  metricGroup: document.querySelector("#metricGroup"),
+  summaryLabel: document.querySelector("#summaryLabel"),
+  summaryValue: document.querySelector("#summaryValue"),
+  summaryDetail: document.querySelector("#summaryDetail"),
   selectedPointTime: document.querySelector("#selectedPointTime"),
   selectedPointDetail: document.querySelector("#selectedPointDetail"),
   rangeGroup: document.querySelector("#rangeGroup"),
@@ -22,6 +76,7 @@ const dom = {
   chartStage: document.querySelector(".chart-stage"),
   chartTooltip: document.querySelector("#chartTooltip"),
   chartSvg: document.querySelector("#chartSvg"),
+  axisYTitle: document.querySelector("#axisYTitle"),
   axisYTop: document.querySelector("#axisYTop"),
   axisYMid: document.querySelector("#axisYMid"),
   axisYBottom: document.querySelector("#axisYBottom"),
@@ -32,11 +87,27 @@ const dom = {
 };
 
 const state = {
-  range: window.localStorage.getItem(RANGE_STORAGE_KEY) || "7d",
+  range: loadStoredRange(),
+  metric: loadStoredMetric(),
   history: null,
   snapshot: null,
   selectedBucketStart: null
 };
+
+function loadStoredRange() {
+  const value = window.localStorage.getItem(RANGE_STORAGE_KEY);
+  return Object.prototype.hasOwnProperty.call(RANGE_WINDOW_MS, value) ? value : DEFAULT_RANGE;
+}
+
+function loadStoredMetric() {
+  const value = window.localStorage.getItem(METRIC_STORAGE_KEY);
+  return Object.prototype.hasOwnProperty.call(METRIC_DEFINITIONS, value) ? value : DEFAULT_METRIC;
+}
+
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 function formatMoney(value, digits = 2) {
   const number = Number(value);
@@ -50,13 +121,23 @@ function formatMoney(value, digits = 2) {
   });
 }
 
-function formatSigned(value, digits = 2) {
+function formatSignedMoney(value, digits = 2) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return "--";
   }
 
   return `${number > 0 ? "+" : ""}${formatMoney(number, digits)}`;
+}
+
+function formatPercent(value, digits = 2, { signed = false } = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return "--";
+  }
+
+  const prefix = signed && number > 0 ? "+" : "";
+  return `${prefix}${number.toFixed(digits)}%`;
 }
 
 function formatDateTime(value) {
@@ -88,45 +169,143 @@ function formatAxisTime(value) {
     return "--";
   }
 
-  return `${date.toLocaleDateString("zh-CN", {
+  if (state.range === "24h") {
+    return date.toLocaleTimeString("zh-CN", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  if (state.range === "7d" || state.range === "30d") {
+    return `${date.toLocaleDateString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit"
+    })}\n${date.toLocaleTimeString("zh-CN", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit"
+    })}`;
+  }
+
+  if (state.range === "90d" || state.range === "180d" || state.range === "1y") {
+    return date.toLocaleDateString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit"
+    });
+  }
+
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  })}\n${date.toLocaleTimeString("zh-CN", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit"
-  })}`;
+  });
 }
 
 function setStatus(message) {
   dom.statusMessage.textContent = message;
 }
 
-function getRangeWindowMs(range) {
-  if (range === "24h") {
-    return 24 * 60 * 60 * 1000;
-  }
-
-  if (range === "7d") {
-    return 7 * 24 * 60 * 60 * 1000;
-  }
-
-  if (range === "30d") {
-    return 30 * 24 * 60 * 60 * 1000;
-  }
-
-  return Number.POSITIVE_INFINITY;
+function getMetricDefinition(metricKey = state.metric) {
+  return METRIC_DEFINITIONS[metricKey] || METRIC_DEFINITIONS[DEFAULT_METRIC];
 }
 
-function getFilteredRecords() {
-  const records = state.history?.records || [];
-  const windowMs = getRangeWindowMs(state.range);
+function getMonthKey(timestamp) {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth() + 1}`;
+}
+
+function buildMetricContext(rawRecords) {
+  const monthAnchors = new Map();
+
+  for (const record of rawRecords) {
+    const monthKey = getMonthKey(record.bucketStart);
+    if (!monthAnchors.has(monthKey)) {
+      monthAnchors.set(monthKey, toNumber(record.totalMarginBalance));
+    }
+  }
+
+  return {
+    firstAsset: rawRecords.length ? toNumber(rawRecords[0].totalMarginBalance) : null,
+    monthAnchors
+  };
+}
+
+function computeMetricValues(assetValue, bucketStart, context) {
+  const asset = toNumber(assetValue, NaN);
+  if (!Number.isFinite(asset)) {
+    return {
+      totalReturn: NaN,
+      accountAsset: NaN,
+      cumulativeProfit: NaN,
+      monthlyReturn: NaN
+    };
+  }
+
+  const firstAsset = Number.isFinite(context.firstAsset) ? context.firstAsset : asset;
+  const monthAnchor = context.monthAnchors.get(getMonthKey(bucketStart));
+  const monthlyBase = Number.isFinite(monthAnchor) ? monthAnchor : asset;
+
+  return {
+    totalReturn: firstAsset > 0 ? ((asset - firstAsset) / firstAsset) * 100 : 0,
+    accountAsset: asset,
+    cumulativeProfit: asset - firstAsset,
+    monthlyReturn: monthlyBase > 0 ? ((asset - monthlyBase) / monthlyBase) * 100 : 0
+  };
+}
+
+function buildDerivedSeries(rawRecords) {
+  const context = buildMetricContext(rawRecords);
+
+  return {
+    context,
+    records: rawRecords.map((record) => ({
+      ...record,
+      metrics: computeMetricValues(record.totalMarginBalance, record.bucketStart, context)
+    }))
+  };
+}
+
+function buildLiveSnapshotPoint(context) {
+  const totalMarginBalance = Number(state.snapshot?.totalMarginBalance);
+  if (!Number.isFinite(totalMarginBalance)) {
+    return null;
+  }
+
+  const timestamp = new Date(state.snapshot?.updatedAt || Date.now()).valueOf();
+  const bucketStart = Number.isFinite(timestamp) ? timestamp : Date.now();
+
+  return {
+    bucketStart,
+    recordedAt: state.snapshot?.updatedAt || new Date(bucketStart).toISOString(),
+    totalMarginBalance,
+    walletBalance: toNumber(state.snapshot?.walletBalance),
+    availableBalance: toNumber(state.snapshot?.availableBalance),
+    totalUnrealizedProfit: toNumber(state.snapshot?.totalUnrealizedProfit),
+    positionCount: Math.max(0, Math.trunc(toNumber(state.snapshot?.positionCount))),
+    metrics: computeMetricValues(totalMarginBalance, bucketStart, context)
+  };
+}
+
+function getMetricValue(record, metricKey = state.metric) {
+  return record?.metrics?.[metricKey];
+}
+
+function getFilteredRecords(records) {
+  const windowMs = RANGE_WINDOW_MS[state.range] ?? RANGE_WINDOW_MS[DEFAULT_RANGE];
   if (!Number.isFinite(windowMs)) {
     return records;
   }
 
   const cutoff = Date.now() - windowMs;
   return records.filter((record) => record.bucketStart >= cutoff);
+}
+
+function updateMetricButtons() {
+  const buttons = dom.metricGroup.querySelectorAll(".metric-button");
+  buttons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.metric === state.metric);
+  });
 }
 
 function updateRangeButtons() {
@@ -152,22 +331,41 @@ function ensureSelectedRecord(records) {
   return fallback;
 }
 
-function renderSummary(records) {
-  const currentEquity = Number(state.snapshot?.totalMarginBalance);
-  const fallbackEquity = Number(state.history?.currentEquity);
-  const latestEquity = Number.isFinite(currentEquity)
-    ? currentEquity
-    : Number.isFinite(fallbackEquity)
-      ? fallbackEquity
-      : records[records.length - 1]?.totalMarginBalance;
+function formatMetricValue(metricKey, value, { signed = false } = {}) {
+  const definition = getMetricDefinition(metricKey);
+  if (definition.kind === "percent") {
+    return formatPercent(value, 2, { signed });
+  }
 
-  dom.currentEquity.textContent = formatMoney(latestEquity);
+  return signed ? formatSignedMoney(value, 2) : formatMoney(value, 2);
+}
 
-  const selectedRecord = ensureSelectedRecord(records);
-  dom.selectedPointTime.textContent = selectedRecord ? formatDateTime(selectedRecord.bucketStart) : "--";
-  dom.selectedPointDetail.textContent = selectedRecord
-    ? `净值 ${formatMoney(selectedRecord.totalMarginBalance)} · ${selectedRecord.positionCount} 笔持仓`
-    : "点击曲线查看详情";
+function setSummaryTone(metricValue) {
+  dom.summaryValue.classList.remove("positive", "negative");
+
+  if (!Number.isFinite(metricValue) || state.metric === "accountAsset") {
+    return;
+  }
+
+  if (metricValue > 0) {
+    dom.summaryValue.classList.add("positive");
+  } else if (metricValue < 0) {
+    dom.summaryValue.classList.add("negative");
+  }
+}
+
+function renderSummary(context, derivedRecords) {
+  const definition = getMetricDefinition();
+  const fallbackPoint = derivedRecords[derivedRecords.length - 1] || null;
+  const livePoint = buildLiveSnapshotPoint(context) || fallbackPoint;
+  const metricValue = getMetricValue(livePoint, state.metric);
+
+  dom.summaryLabel.textContent = definition.summaryLabel;
+  dom.summaryValue.textContent = formatMetricValue(state.metric, metricValue, {
+    signed: definition.useSignedSummary
+  });
+  dom.summaryDetail.textContent = definition.summaryDetail;
+  setSummaryTone(metricValue);
 }
 
 function renderDelta(records) {
@@ -177,12 +375,30 @@ function renderDelta(records) {
     return;
   }
 
-  const first = Number(records[0].totalMarginBalance);
-  const last = Number(records[records.length - 1].totalMarginBalance);
-  const delta = last - first;
-  const percent = first > 0 ? (delta / first) * 100 : 0;
-  dom.rangeDelta.textContent = `${formatSigned(delta, 2)} (${delta >= 0 ? "+" : ""}${percent.toFixed(2)}%)`;
-  dom.rangeDelta.style.color = delta >= 0 ? "var(--good)" : "var(--bad)";
+  const firstRecord = records[0];
+  const lastRecord = records[records.length - 1];
+  const firstValue = getMetricValue(firstRecord, state.metric);
+  const lastValue = getMetricValue(lastRecord, state.metric);
+  const definition = getMetricDefinition();
+
+  let deltaText = "--";
+  let deltaNumber = 0;
+
+  if (definition.kind === "percent") {
+    deltaNumber = toNumber(lastValue) - toNumber(firstValue);
+    deltaText = formatPercent(deltaNumber, 2, { signed: true });
+  } else {
+    const amountDelta = toNumber(lastRecord.totalMarginBalance) - toNumber(firstRecord.totalMarginBalance);
+    const amountPercent = toNumber(firstRecord.totalMarginBalance) > 0
+      ? (amountDelta / toNumber(firstRecord.totalMarginBalance)) * 100
+      : 0;
+
+    deltaNumber = amountDelta;
+    deltaText = `${formatSignedMoney(amountDelta, 2)} (${formatPercent(amountPercent, 2, { signed: true })})`;
+  }
+
+  dom.rangeDelta.textContent = deltaText;
+  dom.rangeDelta.style.color = deltaNumber >= 0 ? "var(--good)" : "var(--bad)";
 }
 
 function buildXTicks(records) {
@@ -190,7 +406,13 @@ function buildXTicks(records) {
     return [];
   }
 
-  const indexes = new Set([0, Math.floor((records.length - 1) / 3), Math.floor(((records.length - 1) * 2) / 3), records.length - 1]);
+  const indexes = new Set([
+    0,
+    Math.floor((records.length - 1) / 3),
+    Math.floor(((records.length - 1) * 2) / 3),
+    records.length - 1
+  ]);
+
   return Array.from(indexes)
     .sort((left, right) => left - right)
     .map((index) => records[index])
@@ -198,6 +420,8 @@ function buildXTicks(records) {
 }
 
 function renderAxes(records) {
+  dom.axisYTitle.textContent = getMetricDefinition().axisTitle;
+
   if (!records.length) {
     dom.axisYTop.textContent = "--";
     dom.axisYMid.textContent = "--";
@@ -206,14 +430,14 @@ function renderAxes(records) {
     return;
   }
 
-  const values = records.map((record) => Number(record.totalMarginBalance));
+  const values = records.map((record) => getMetricValue(record, state.metric));
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const midValue = minValue + ((maxValue - minValue) / 2);
 
-  dom.axisYTop.textContent = formatMoney(maxValue, 2);
-  dom.axisYMid.textContent = formatMoney(midValue, 2);
-  dom.axisYBottom.textContent = formatMoney(minValue, 2);
+  dom.axisYTop.textContent = formatMetricValue(state.metric, maxValue);
+  dom.axisYMid.textContent = formatMetricValue(state.metric, midValue);
+  dom.axisYBottom.textContent = formatMetricValue(state.metric, minValue);
 
   const ticks = buildXTicks(records);
   dom.axisXTicks.innerHTML = ticks
@@ -231,7 +455,7 @@ function buildChartMarkup(records) {
     left: 10
   };
 
-  const values = records.map((record) => Number(record.totalMarginBalance));
+  const values = records.map((record) => getMetricValue(record, state.metric));
   const times = records.map((record) => Number(record.bucketStart));
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
@@ -239,13 +463,13 @@ function buildChartMarkup(records) {
   const maxTime = Math.max(...times);
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const valueSpan = maxValue - minValue || Math.max(maxValue * 0.01, 1);
+  const valueSpan = maxValue - minValue || Math.max(Math.abs(maxValue) * 0.01, 1);
   const timeSpan = maxTime - minTime || 1;
   const baseY = height - padding.bottom;
 
   const points = records.map((record) => {
     const x = padding.left + ((record.bucketStart - minTime) / timeSpan) * chartWidth;
-    const y = padding.top + (1 - ((record.totalMarginBalance - minValue) / valueSpan)) * chartHeight;
+    const y = padding.top + (1 - ((getMetricValue(record, state.metric) - minValue) / valueSpan)) * chartHeight;
     return { x, y, record };
   });
 
@@ -254,17 +478,21 @@ function buildChartMarkup(records) {
     return `<line class="chart-grid" x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}"></line>`;
   }).join("");
 
-  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+  const linePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
   const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(2)} ${baseY} L ${points[0].x.toFixed(2)} ${baseY} Z`;
-  const hitPoints = points.map((point) => `
-    <circle
-      class="chart-point-hit"
-      data-bucket-start="${point.record.bucketStart}"
-      cx="${point.x.toFixed(2)}"
-      cy="${point.y.toFixed(2)}"
-      r="12"
-    ></circle>
-  `).join("");
+  const hitPoints = points
+    .map((point) => `
+      <circle
+        class="chart-point-hit"
+        data-bucket-start="${point.record.bucketStart}"
+        cx="${point.x.toFixed(2)}"
+        cy="${point.y.toFixed(2)}"
+        r="12"
+      ></circle>
+    `)
+    .join("");
 
   if (points.length === 1) {
     return `
@@ -279,6 +507,22 @@ function buildChartMarkup(records) {
     <path class="chart-line" d="${linePath}"></path>
     ${hitPoints}
   `;
+}
+
+function renderTooltipContent(selectedRecord) {
+  if (!selectedRecord) {
+    dom.chartTooltip.hidden = true;
+    return;
+  }
+
+  const metricValue = formatMetricValue(state.metric, getMetricValue(selectedRecord, state.metric), {
+    signed: state.metric !== "accountAsset"
+  });
+
+  dom.selectedPointTime.textContent = formatDateTime(selectedRecord.bucketStart);
+  dom.selectedPointDetail.textContent = state.metric === "accountAsset"
+    ? `${selectedRecord.positionCount} 笔持仓`
+    : `${metricValue} · 资产 ${formatMoney(selectedRecord.totalMarginBalance)} · ${selectedRecord.positionCount} 笔持仓`;
 }
 
 function positionTooltip(selectedRecord) {
@@ -299,7 +543,7 @@ function positionTooltip(selectedRecord) {
   const pointRect = selectedPoint.getBoundingClientRect();
   const pointCenterX = pointRect.left - stageRect.left + (pointRect.width / 2);
   const pointTopY = pointRect.top - stageRect.top;
-  const tooltipWidth = dom.chartTooltip.offsetWidth || 140;
+  const tooltipWidth = dom.chartTooltip.offsetWidth || 156;
   const safeHalfWidth = tooltipWidth / 2;
   const clampedX = Math.max(safeHalfWidth + 8, Math.min(stageRect.width - safeHalfWidth - 8, pointCenterX));
   const top = Math.max(12, pointTopY - 6);
@@ -324,6 +568,7 @@ function renderChart(records) {
   dom.chartEmpty.hidden = true;
   renderAxes(records);
   dom.chartSvg.innerHTML = buildChartMarkup(records);
+  renderTooltipContent(selectedRecord);
   positionTooltip(selectedRecord);
 }
 
@@ -348,23 +593,32 @@ function renderRecords(records) {
     .reverse()
     .forEach((record) => {
       const row = document.createElement("div");
+      const metricValue = formatMetricValue(state.metric, getMetricValue(record, state.metric), {
+        signed: state.metric !== "accountAsset"
+      });
+
       row.className = "record-row";
       row.innerHTML = `
         <span class="record-time">${formatDateTime(record.bucketStart)}</span>
-        <strong class="record-value">${formatMoney(record.totalMarginBalance, 2)}</strong>
-        <span class="record-side">${record.positionCount} 笔持仓</span>
+        <strong class="record-value">${metricValue}</strong>
+        <span class="record-side">资产 ${formatMoney(record.totalMarginBalance)} · ${record.positionCount} 笔持仓</span>
       `;
       dom.recordsList.appendChild(row);
     });
 }
 
 function renderAll() {
-  const filteredRecords = getFilteredRecords();
+  const rawRecords = state.history?.records || [];
+  const { context, records: derivedRecords } = buildDerivedSeries(rawRecords);
+  const filteredRecords = getFilteredRecords(derivedRecords);
+
+  updateMetricButtons();
   updateRangeButtons();
-  renderSummary(filteredRecords);
+  renderSummary(context, derivedRecords);
   renderDelta(filteredRecords);
   renderChart(filteredRecords);
   renderRecords(filteredRecords);
+
   dom.storagePath.textContent = state.history?.storageDirectory || "--";
   dom.storagePath.title = state.history?.filePath || "";
 }
@@ -423,6 +677,14 @@ function applyCapabilities() {
   const capabilities = bridge.capabilities || {};
   document.documentElement.dataset.platform = bridge.platform || "electron";
   document.body.classList.toggle("web-mode", bridge.platform === "web");
+  document.body.classList.toggle("embed-mode", isEmbedded);
+
+  if (isEmbedded) {
+    dom.openFolderButton.hidden = true;
+    dom.minimizeButton.hidden = true;
+    dom.closeButton.hidden = true;
+    return;
+  }
 
   if (!capabilities.windowControls) {
     dom.minimizeButton.hidden = true;
@@ -439,6 +701,17 @@ function bindEvents() {
   if (savedInterval) {
     dom.exportIntervalInput.value = savedInterval;
   }
+
+  dom.metricGroup.addEventListener("click", (event) => {
+    const button = event.target.closest(".metric-button");
+    if (!button) {
+      return;
+    }
+
+    state.metric = button.dataset.metric;
+    window.localStorage.setItem(METRIC_STORAGE_KEY, state.metric);
+    renderAll();
+  });
 
   dom.rangeGroup.addEventListener("click", (event) => {
     const button = event.target.closest(".range-button");

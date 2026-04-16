@@ -207,6 +207,19 @@ select {
   justify-content: flex-end;
 }
 
+.drawer-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.drawer-actions .primary-button {
+  margin-right: auto;
+}
+
+.drawer-actions .ghost-button {
+  min-width: 56px;
+}
+
 .chrome-button,
 .icon-button,
 .primary-button,
@@ -365,6 +378,7 @@ select {
 }
 
 .hero-card,
+.web-history-panel,
 .positions-panel,
 .settings-drawer {
   border: 1px solid rgba(71, 51, 19, 0.08);
@@ -374,6 +388,7 @@ select {
 }
 
 .hero-card,
+.web-history-panel,
 .positions-panel {
   border-radius: 20px;
   padding: 10px;
@@ -381,6 +396,36 @@ select {
 
 .hero-card {
   flex-shrink: 0;
+}
+
+.web-history-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.web-badge {
+  min-width: auto;
+  padding-inline: 10px;
+}
+
+.web-history-frame-wrap {
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(72, 54, 19, 0.08);
+  background: rgba(255, 252, 246, 0.72);
+}
+
+.web-history-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 540px;
+  border: 0;
+  background: transparent;
 }
 
 .status-row,
@@ -858,7 +903,7 @@ body.web-mode {
 }
 
 body.web-mode .app-shell {
-  width: min(388px, calc(100vw - 28px));
+  width: min(1220px, calc(100vw - 28px));
   min-height: calc(100vh - 28px);
   height: auto;
   margin: 14px auto;
@@ -866,10 +911,24 @@ body.web-mode .app-shell {
 
 body.web-mode .content {
   overflow: visible;
+  gap: 12px;
 }
 
 body.web-mode .positions-panel {
-  min-height: 300px;
+  min-height: 320px;
+  flex: 0 0 auto;
+}
+
+body.web-mode .web-history-panel {
+  min-height: 680px;
+}
+
+body.web-mode .web-history-frame {
+  min-height: 600px;
+}
+
+body.web-mode #historyButton {
+  display: none !important;
 }
 
 @keyframes rise-in {

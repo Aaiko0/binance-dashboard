@@ -114,7 +114,8 @@ input {
 .window-actions,
 .toolbar,
 .range-group,
-.export-group {
+.export-group,
+.metric-group {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -141,9 +142,9 @@ input {
 
 .header-button:hover,
 .range-button:hover,
-.primary-button:hover {
+.primary-button:hover,
+.metric-button:hover {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.9);
 }
 
 .header-button.small {
@@ -168,6 +169,38 @@ input {
   overflow: hidden;
 }
 
+.metric-group {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-top: 2px;
+}
+
+.metric-button {
+  border: 0;
+  background: transparent;
+  padding: 2px 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.metric-button.active {
+  color: var(--ink);
+}
+
+.metric-button.active::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 2px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -184,20 +217,28 @@ input {
 }
 
 .summary-card {
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 
 .summary-card strong {
   display: block;
   margin-top: 4px;
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1.05;
+}
+
+.summary-card strong.positive {
+  color: var(--good);
+}
+
+.summary-card strong.negative {
+  color: var(--bad);
 }
 
 .summary-detail {
   display: block;
-  margin-top: 5px;
-  font-size: 10px;
+  margin-top: 6px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -317,7 +358,7 @@ input {
 
 .chart-body {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
   gap: 8px;
   width: 100%;
   min-height: 0;
@@ -342,7 +383,7 @@ input {
 .axis-title.vertical {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  min-height: 82px;
+  min-height: 96px;
   justify-self: center;
 }
 
@@ -362,7 +403,7 @@ input {
 .chart-stage {
   position: relative;
   flex: 1;
-  min-height: 200px;
+  min-height: 220px;
   overflow: hidden;
   border-radius: 14px;
   background: rgba(255, 252, 247, 0.85);
@@ -400,7 +441,7 @@ input {
   display: flex;
   flex-direction: column;
   min-height: 120px;
-  max-height: 150px;
+  max-height: 160px;
   padding: 10px;
   flex-shrink: 0;
 }
@@ -475,16 +516,6 @@ input {
   stroke-linejoin: round;
 }
 
-.chart-point {
-  fill: #fff6e3;
-  stroke: var(--accent);
-  stroke-width: 2;
-}
-
-.chart-point.selected {
-  fill: var(--accent);
-}
-
 .chart-point-hit {
   fill: transparent;
   cursor: pointer;
@@ -493,8 +524,8 @@ input {
 .chart-tooltip {
   position: absolute;
   z-index: 2;
-  min-width: 118px;
-  max-width: 156px;
+  min-width: 148px;
+  max-width: 208px;
   padding: 6px 8px;
   border-radius: 10px;
   border: 1px solid rgba(70, 51, 18, 0.08);
@@ -540,4 +571,46 @@ body.web-mode .window-shell {
   min-height: calc(100vh - 28px);
   height: auto;
   margin: 14px auto;
+}
+
+body.embed-mode {
+  overflow: hidden;
+  background: transparent;
+}
+
+body.embed-mode::before {
+  display: none;
+}
+
+body.embed-mode .window-shell {
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+}
+
+body.embed-mode .window-header,
+body.embed-mode .records-panel,
+body.embed-mode .status-message,
+body.embed-mode .meta-right {
+  display: none;
+}
+
+body.embed-mode .window-content {
+  gap: 8px;
+}
+
+body.embed-mode .summary-card,
+body.embed-mode .chart-panel {
+  border-radius: 16px;
+}
+
+body.embed-mode .chart-panel {
+  padding: 10px;
+}
+
+body.embed-mode .chart-stage {
+  min-height: 420px;
 }

@@ -102,6 +102,20 @@
           </div>
         </section>
 
+        <section id="webHistoryPanel" class="web-history-panel" hidden>
+          <div class="section-head">
+            <div>
+              <p class="kicker">净值</p>
+              <h2>净值走势</h2>
+            </div>
+            <span class="count-pill web-badge">网页端常驻</span>
+          </div>
+
+          <div class="web-history-frame-wrap">
+            <iframe id="webHistoryFrame" class="web-history-frame" title="净值走势"></iframe>
+          </div>
+        </section>
+
         <section class="positions-panel">
           <div class="section-head">
             <div>
@@ -238,6 +252,7 @@
         <div class="drawer-actions">
           <button id="saveButton" class="primary-button" type="submit">保存并连接</button>
           <button id="cancelButton" class="ghost-button" type="button">取消</button>
+          <button id="resetDefaultsButton" class="ghost-button" type="button">默认</button>
         </div>
       </form>
     </aside>

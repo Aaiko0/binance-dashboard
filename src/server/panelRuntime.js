@@ -1,5 +1,5 @@
 const { EventEmitter } = require("node:events");
-const { sanitizeSettings } = require("../main/configStore");
+const { buildDefaultSettings, sanitizeSettings } = require("../main/configStore");
 const { NullPushGateway, NullCloudGateway } = require("./integrationPorts");
 
 class PanelRuntime extends EventEmitter {
@@ -50,6 +50,10 @@ class PanelRuntime extends EventEmitter {
 
   getSettings() {
     return sanitizeSettings(this.configStore.load());
+  }
+
+  getDefaultSettings() {
+    return sanitizeSettings(buildDefaultSettings());
   }
 
   getSnapshot() {
