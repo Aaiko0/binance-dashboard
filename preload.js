@@ -1,8 +1,20 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-const ALERT_EVENT_CHANNEL = "alert:triggered";
+const CHANNELS = {
+  alert: "alert:triggered",
+  history: "history:updated",
+  snapshot: "panel:snapshot"
+};
+
+const capabilities = Object.freeze({
+  alwaysOnTop: true,
+  folderAccess: true,
+  windowControls: true
+});
 
 contextBridge.exposeInMainWorld("binancePanel", {
+  platform: "electron",
+  capabilities,
   getSettings: () => ipcRenderer.invoke("panel:get-settings"),
   getState: () => ipcRenderer.invoke("panel:get-state"),
   saveSettings: (payload) => ipcRenderer.invoke("panel:save-settings", payload),
@@ -16,24 +28,18 @@ contextBridge.exposeInMainWorld("binancePanel", {
   closeWindow: () => ipcRenderer.send("window:close"),
   quitApp: () => ipcRenderer.send("app:quit"),
   onSnapshot: (callback) => {
-    const listener = (_event, snapshot) => callback(snapshot);
-    ipcRenderer.on("panel:snapshot", listener);
-    return () => {
-      ipcRenderer.removeListener("panel:snapshot", listener);
-    };
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(CHANNELS.snapshot, listener);
+    return () => ipcRenderer.removeListener(CHANNELS.snapshot, listener);
   },
   onEquityHistoryUpdated: (callback) => {
     const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on("history:updated", listener);
-    return () => {
-      ipcRenderer.removeListener("history:updated", listener);
-    };
+    ipcRenderer.on(CHANNELS.history, listener);
+    return () => ipcRenderer.removeListener(CHANNELS.history, listener);
   },
   onEquityAlert: (callback) => {
     const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on(ALERT_EVENT_CHANNEL, listener);
-    return () => {
-      ipcRenderer.removeListener(ALERT_EVENT_CHANNEL, listener);
-    };
+    ipcRenderer.on(CHANNELS.alert, listener);
+    return () => ipcRenderer.removeListener(CHANNELS.alert, listener);
   }
 });

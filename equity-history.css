@@ -530,3 +530,14 @@ input {
   line-height: 1.35;
   color: var(--muted);
 }
+
+body.web-mode {
+  overflow: auto;
+}
+
+body.web-mode .window-shell {
+  width: min(1120px, calc(100vw - 28px));
+  min-height: calc(100vh - 28px);
+  height: auto;
+  margin: 14px auto;
+}

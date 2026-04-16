@@ -1,6 +1,8 @@
 const RANGE_STORAGE_KEY = "binance-panel.history-range";
 const EXPORT_INTERVAL_STORAGE_KEY = "binance-panel.export-interval";
 
+const bridge = window.binancePanel;
+
 const dom = {
   currentEquity: document.querySelector("#currentEquity"),
   selectedPointTime: document.querySelector("#selectedPointTime"),
@@ -86,7 +88,10 @@ function formatAxisTime(value) {
     return "--";
   }
 
-  return `${date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}\n${date.toLocaleTimeString("zh-CN", {
+  return `${date.toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit"
+  })}\n${date.toLocaleTimeString("zh-CN", {
     hour12: false,
     hour: "2-digit",
     minute: "2-digit"
@@ -137,9 +142,9 @@ function ensureSelectedRecord(records) {
     return null;
   }
 
-  const selectedRecord = records.find((record) => record.bucketStart === state.selectedBucketStart);
-  if (selectedRecord) {
-    return selectedRecord;
+  const matched = records.find((record) => record.bucketStart === state.selectedBucketStart);
+  if (matched) {
+    return matched;
   }
 
   const fallback = records[records.length - 1];
@@ -255,8 +260,6 @@ function buildChartMarkup(records) {
     <circle
       class="chart-point-hit"
       data-bucket-start="${point.record.bucketStart}"
-      data-point-x="${point.x.toFixed(2)}"
-      data-point-y="${point.y.toFixed(2)}"
       cx="${point.x.toFixed(2)}"
       cy="${point.y.toFixed(2)}"
       r="12"
@@ -309,7 +312,7 @@ function renderChart(records) {
   if (!records.length) {
     dom.chartCanvasWrap.hidden = true;
     dom.chartEmpty.hidden = false;
-    dom.chartEmptyHint.textContent = "应用会每 5 分钟自动写入一条净值。";
+    dom.chartEmptyHint.textContent = "应用会每 5 分钟自动写入一条净值记录。";
     dom.chartSvg.innerHTML = "";
     dom.chartTooltip.hidden = true;
     renderAxes([]);
@@ -371,14 +374,14 @@ async function loadData() {
 
   try {
     const [history, snapshot] = await Promise.all([
-      window.binancePanel.getEquityHistory(),
-      window.binancePanel.getState()
+      bridge.getEquityHistory(),
+      bridge.getState()
     ]);
 
     state.history = history;
     state.snapshot = snapshot;
     renderAll();
-    setStatus(`历史文件: ${history.filePath || "未生成"}`);
+    setStatus(`历史文件：${history.filePath || "尚未生成"}`);
   } catch (error) {
     setStatus(error.message || "读取净值历史失败");
   }
@@ -395,7 +398,7 @@ async function handleExport() {
   setStatus("正在导出 CSV...");
 
   try {
-    const result = await window.binancePanel.exportEquityHistory(intervalMinutes);
+    const result = await bridge.exportEquityHistory(intervalMinutes);
     if (result.canceled) {
       setStatus("已取消导出");
       return;
@@ -409,10 +412,25 @@ async function handleExport() {
 
 async function handleOpenFolder() {
   try {
-    const folderPath = await window.binancePanel.openEquityHistoryFolder();
-    setStatus(`已打开目录 ${folderPath}`);
+    const folderPath = await bridge.openEquityHistoryFolder();
+    setStatus(`历史目录：${folderPath}`);
   } catch (error) {
     setStatus(error.message || "打开目录失败");
+  }
+}
+
+function applyCapabilities() {
+  const capabilities = bridge.capabilities || {};
+  document.documentElement.dataset.platform = bridge.platform || "electron";
+  document.body.classList.toggle("web-mode", bridge.platform === "web");
+
+  if (!capabilities.windowControls) {
+    dom.minimizeButton.hidden = true;
+    dom.closeButton.hidden = true;
+  }
+
+  if (!capabilities.folderAccess) {
+    dom.openFolderButton.hidden = true;
   }
 }
 
@@ -446,17 +464,17 @@ function bindEvents() {
   dom.exportButton.addEventListener("click", handleExport);
   dom.openFolderButton.addEventListener("click", handleOpenFolder);
   dom.refreshButton.addEventListener("click", loadData);
-  dom.minimizeButton.addEventListener("click", () => window.binancePanel.minimizeWindow());
-  dom.closeButton.addEventListener("click", () => window.binancePanel.closeWindow());
+  dom.minimizeButton.addEventListener("click", () => bridge.minimizeWindow());
+  dom.closeButton.addEventListener("click", () => bridge.closeWindow());
 }
 
 function bindSubscriptions() {
-  window.binancePanel.onSnapshot((snapshot) => {
+  bridge.onSnapshot((snapshot) => {
     state.snapshot = snapshot;
     renderAll();
   });
 
-  window.binancePanel.onEquityHistoryUpdated((historyPayload) => {
+  bridge.onEquityHistoryUpdated((historyPayload) => {
     state.history = historyPayload;
     renderAll();
     setStatus(`已采样 ${formatDateTime(historyPayload.records[historyPayload.records.length - 1]?.bucketStart)}`);
@@ -464,12 +482,17 @@ function bindSubscriptions() {
 }
 
 async function bootstrap() {
+  if (!bridge) {
+    throw new Error("binancePanel bridge is not available");
+  }
+
+  applyCapabilities();
   bindEvents();
   bindSubscriptions();
-  window.addEventListener("resize", () => {
-    renderAll();
-  });
+  window.addEventListener("resize", renderAll);
   await loadData();
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  setStatus(error.message || "净值历史初始化失败");
+});

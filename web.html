@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>币安持仓实时板 Web 入口</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        color: #211d18;
+        background:
+          radial-gradient(circle at top left, rgba(255, 252, 242, 0.95), transparent 34%),
+          radial-gradient(circle at bottom right, rgba(218, 174, 93, 0.3), transparent 28%),
+          linear-gradient(145deg, #f5e6bf 0%, #ecd7a5 60%, #e4c88f 100%);
+      }
+
+      .launcher {
+        width: min(460px, 100%);
+        padding: 24px;
+        border-radius: 24px;
+        border: 1px solid rgba(71, 51, 19, 0.08);
+        background: linear-gradient(180deg, rgba(255, 251, 242, 0.96) 0%, rgba(255, 246, 223, 0.86) 100%);
+        box-shadow: 0 18px 36px rgba(77, 56, 18, 0.16);
+      }
+
+      .eyebrow {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #6d614c;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.05;
+      }
+
+      p {
+        margin: 12px 0 0;
+        line-height: 1.6;
+        color: #6d614c;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      button,
+      a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(64, 47, 16, 0.1);
+        background: rgba(255, 252, 243, 0.82);
+        color: #211d18;
+        font: inherit;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .primary {
+        background: linear-gradient(180deg, #d9973a 0%, #bc7f20 100%);
+        color: #fff8ec;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(255, 250, 239, 0.9);
+      }
+
+      .status {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(255, 250, 239, 0.7);
+        color: #6d614c;
+        line-height: 1.5;
+        white-space: pre-line;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="launcher">
+      <span class="eyebrow">LOCAL WEB ENTRY</span>
+      <h1>币安持仓实时板</h1>
+      <p>这个文件是本地网页版入口。先启动本地服务，再点“打开网页版”。默认服务地址是 <code>http://127.0.0.1:4580</code>。</p>
+
+      <div class="actions">
+        <button id="openButton" class="primary" type="button">打开网页版</button>
+        <a href="./README.md">查看说明</a>
+      </div>
+
+      <div id="status" class="status">正在检查本地服务状态...</div>
+    </main>
+
+    <script>
+      (function () {
+        const apiOrigin = "http://127.0.0.1:4580";
+        const statusNode = document.querySelector("#status");
+        const openButton = document.querySelector("#openButton");
+
+        async function checkServer() {
+          try {
+            const response = await fetch(`${apiOrigin}/api/meta`);
+            if (!response.ok) {
+              throw new Error("服务未返回可用状态");
+            }
+
+            statusNode.textContent = "本地服务在线。点击“打开网页版”后会进入实时面板。";
+            return true;
+          } catch (_error) {
+            statusNode.textContent = "本地服务未启动。\n请先在项目目录执行 npm run web，然后再打开网页版。";
+            return false;
+          }
+        }
+
+        openButton.addEventListener("click", async () => {
+          const online = await checkServer();
+          if (!online) {
+            return;
+          }
+
+          window.open(`${apiOrigin}/`, "binance-panel-web");
+        });
+
+        checkServer();
+      })();
+    </script>
+  </body>
+</html>

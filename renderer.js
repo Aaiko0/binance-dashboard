@@ -55,6 +55,8 @@ const ALERT_SOUND_LABELS = Object.freeze({
   cascade: "Cascade 长回响"
 });
 
+const bridge = window.binancePanel;
+
 const dom = {
   statusBadge: document.querySelector("#statusBadge"),
   statusMeta: document.querySelector("#statusMeta"),
@@ -75,8 +77,6 @@ const dom = {
   alertDialogMeta: document.querySelector("#alertDialogMeta"),
   alertDismissButton: document.querySelector("#alertDismissButton"),
   alertStopSoundButton: document.querySelector("#alertStopSoundButton"),
-  alertDialogCloseButton: document.querySelector("#alertDialogCloseButton"),
-  backdrop: document.querySelector("#backdrop"),
   settingsDrawer: document.querySelector("#settingsDrawer"),
   settingsForm: document.querySelector("#settingsForm"),
   formStatus: document.querySelector("#formStatus"),
@@ -93,7 +93,7 @@ const dom = {
   equityAlertSoundInput: document.querySelector("#equityAlertSoundInput"),
   equityAlertVolumeInput: document.querySelector("#equityAlertVolumeInput"),
   equityAlertRepeatModeInput: document.querySelector("#equityAlertRepeatModeInput"),
-  testAlertButton: document.querySelector("#testAlertButton"),
+  alwaysOnTopField: document.querySelector("#alwaysOnTopField"),
   alwaysOnTopInput: document.querySelector("#alwaysOnTopInput"),
   historyButton: document.querySelector("#historyButton"),
   pinButton: document.querySelector("#pinButton"),
@@ -102,12 +102,15 @@ const dom = {
   minimizeButton: document.querySelector("#minimizeButton"),
   closeButton: document.querySelector("#closeButton"),
   drawerCloseButton: document.querySelector("#drawerCloseButton"),
-  cancelButton: document.querySelector("#cancelButton")
+  cancelButton: document.querySelector("#cancelButton"),
+  testAlertButton: document.querySelector("#testAlertButton"),
+  backdrop: document.querySelector("#backdrop"),
+  alertDialogCloseButton: document.querySelector("#alertDialogCloseButton")
 };
 
 const state = {
-  latestSnapshot: null,
   latestSettings: null,
+  latestSnapshot: null,
   positionMode: loadPositionMode(),
   audioContext: null,
   activePlaybackTimer: null,
@@ -116,8 +119,7 @@ const state = {
 };
 
 function loadPositionMode() {
-  const value = window.localStorage.getItem(POSITION_MODE_STORAGE_KEY);
-  return value === "usd" ? "usd" : "coin";
+  return window.localStorage.getItem(POSITION_MODE_STORAGE_KEY) === "usd" ? "usd" : "coin";
 }
 
 function savePositionMode(value) {
@@ -125,8 +127,8 @@ function savePositionMode(value) {
 }
 
 function toNumber(value, fallback = 0) {
-  const nextValue = Number(value);
-  return Number.isFinite(nextValue) ? nextValue : fallback;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
 }
 
 function normalizeAlertWindowMinutes(value) {
@@ -181,12 +183,12 @@ function formatTime(value) {
     return "未连接";
   }
 
-  const time = new Date(value);
-  if (Number.isNaN(time.valueOf())) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
     return "未连接";
   }
 
-  return time.toLocaleTimeString("zh-CN", {
+  return date.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
@@ -199,13 +201,13 @@ function formatPrice(value) {
     return "--";
   }
 
-  const absNumber = Math.abs(number);
+  const absoluteValue = Math.abs(number);
   let digits = 6;
-  if (absNumber >= 1000) {
+  if (absoluteValue >= 1000) {
     digits = 2;
-  } else if (absNumber >= 100) {
+  } else if (absoluteValue >= 100) {
     digits = 3;
-  } else if (absNumber >= 1) {
+  } else if (absoluteValue >= 1) {
     digits = 4;
   }
 
@@ -221,13 +223,13 @@ function formatQuantity(value) {
     return "--";
   }
 
-  const absNumber = Math.abs(number);
+  const absoluteValue = Math.abs(number);
   let digits = 4;
-  if (absNumber >= 1000) {
+  if (absoluteValue >= 1000) {
     digits = 0;
-  } else if (absNumber >= 100) {
+  } else if (absoluteValue >= 100) {
     digits = 2;
-  } else if (absNumber >= 1) {
+  } else if (absoluteValue >= 1) {
     digits = 3;
   }
 
@@ -264,7 +266,7 @@ function describeSound(sound) {
 
 function statusDescription(snapshot) {
   if (!snapshot.configured) {
-    return "填入只读 API 后自动连接";
+    return "填入只读 API 后开始同步";
   }
 
   if (snapshot.status === "live") {
@@ -327,7 +329,7 @@ function updatePositionModeButton() {
   dom.positionModeButton.textContent = isUsdMode ? "USD" : "数量";
   dom.positionModeButton.setAttribute("aria-pressed", String(isUsdMode));
   dom.positionModeButton.title = isUsdMode
-    ? "当前显示美元价值，点击切换为币种数量"
+    ? "当前显示名义价值，点击切换为币种数量"
     : "当前显示币种数量，点击切换为美元价值";
 }
 
@@ -443,9 +445,17 @@ function fillForm(settings) {
   dom.equityAlertVolumeInput.value = String(settings.equityAlertVolume ?? 85);
   dom.equityAlertRepeatModeInput.value = settings.equityAlertRepeatMode || "triple";
   dom.alwaysOnTopInput.checked = Boolean(settings.alwaysOnTop);
-  dom.secretHint.textContent = settings.hasApiSecret
-    ? "已保存 Secret，留空则保持原值。"
-    : "尚未保存 Secret。";
+
+  if (bridge.platform === "web") {
+    dom.secretHint.textContent = settings.hasApiSecret
+      ? "当前 Web 运行时已保存 Secret，留空则保持不变。"
+      : "当前 Web 运行时尚未保存 Secret。";
+  } else {
+    dom.secretHint.textContent = settings.hasApiSecret
+      ? "已保存 Secret，留空则保持原值。"
+      : "尚未保存 Secret。";
+  }
+
   dom.pinButton.classList.toggle("active", Boolean(settings.alwaysOnTop));
   dom.pinButton.setAttribute("aria-pressed", String(Boolean(settings.alwaysOnTop)));
   dom.pinButton.title = settings.alwaysOnTop ? "取消窗口置顶" : "窗口置顶";
@@ -525,14 +535,14 @@ function buildTestAlertPayload() {
 
 async function handleSave(event) {
   event.preventDefault();
-  dom.formStatus.textContent = "正在保存并连接...";
+  dom.formStatus.textContent = "正在保存并同步账户...";
 
   try {
-    const result = await window.binancePanel.saveSettings(collectFormPayload());
+    const result = await bridge.saveSettings(collectFormPayload());
     fillForm(result.settings);
     renderSnapshot(result.snapshot);
     dom.formStatus.textContent = result.settings.equityAlertEnabled
-      ? "已保存。真实提醒会在新的 5 分钟采样写入后判断，可先点测试提醒确认弹窗和声音。"
+      ? "已保存。真实提醒会在新的 5 分钟采样写入后判定，可先点测试提醒确认弹窗和声音。"
       : "已保存，正在维持数据刷新。";
     closeDrawer();
   } catch (error) {
@@ -544,7 +554,7 @@ async function handleRefresh() {
   dom.statusMeta.textContent = "正在手动刷新...";
 
   try {
-    const snapshot = await window.binancePanel.refresh();
+    const snapshot = await bridge.refresh();
     renderSnapshot(snapshot);
   } catch (_error) {
     return;
@@ -552,8 +562,7 @@ async function handleRefresh() {
 }
 
 async function handlePinToggle() {
-  const nextValue = !dom.alwaysOnTopInput.checked;
-  const settings = await window.binancePanel.setAlwaysOnTop(nextValue);
+  const settings = await bridge.setAlwaysOnTop(!dom.alwaysOnTopInput.checked);
   fillForm({
     ...state.latestSettings,
     ...settings
@@ -562,7 +571,7 @@ async function handlePinToggle() {
 
 async function openEquityHistoryWindow() {
   try {
-    await window.binancePanel.openEquityHistoryWindow();
+    await bridge.openEquityHistoryWindow();
   } catch (_error) {
     return;
   }
@@ -706,7 +715,7 @@ async function startAlertPlayback({ sound, volume, repeatMode }) {
 function openAlertDialog(alert) {
   const directionLabel = alert.direction === "up" ? "上冲" : "回撤";
   dom.alertDialogTitle.textContent = `净值${directionLabel}预警`;
-  dom.alertDialogMessage.textContent = `${alert.windowMinutes} 分钟内 ${formatPercent(alert.deltaPercent)}，净值 ${formatMoney(alert.baselineEquity)} → ${formatMoney(alert.latestEquity)}`;
+  dom.alertDialogMessage.textContent = `${alert.windowMinutes} 分钟内 ${formatPercent(alert.deltaPercent)}，净值 ${formatMoney(alert.baselineEquity)} -> ${formatMoney(alert.latestEquity)}`;
   dom.alertDialogMeta.textContent = `声音：${describeSound(alert.sound)} · 音量：${alert.volume} · ${describeRepeatMode(alert.repeatMode)}`;
   dom.alertOverlay.hidden = false;
 }
@@ -727,9 +736,25 @@ async function handleEquityAlert(alert) {
 }
 
 async function handleTestAlert() {
-  const testPayload = buildTestAlertPayload();
-  await handleEquityAlert(testPayload);
-  dom.formStatus.textContent = "测试提醒已触发。真实提醒会在新的 5 分钟采样写入后按规则判断。";
+  await handleEquityAlert(buildTestAlertPayload());
+  dom.formStatus.textContent = "测试提醒已触发。真实提醒会在新的 5 分钟采样写入后再按规则判定。";
+}
+
+function applyCapabilities() {
+  const capabilities = bridge.capabilities || {};
+  document.documentElement.dataset.platform = bridge.platform || "electron";
+  document.body.classList.toggle("web-mode", bridge.platform === "web");
+
+  if (!capabilities.windowControls) {
+    dom.minimizeButton.hidden = true;
+    dom.closeButton.hidden = true;
+  }
+
+  if (!capabilities.alwaysOnTop) {
+    dom.pinButton.hidden = true;
+    dom.alwaysOnTopField.hidden = true;
+    dom.alwaysOnTopInput.checked = false;
+  }
 }
 
 function bindEvents() {
@@ -756,26 +781,35 @@ function bindEvents() {
       closeAlertDialog();
     }
   });
-  dom.minimizeButton.addEventListener("click", () => window.binancePanel.minimizeWindow());
-  dom.closeButton.addEventListener("click", () => window.binancePanel.quitApp());
+  dom.minimizeButton.addEventListener("click", () => bridge.minimizeWindow());
+  dom.closeButton.addEventListener("click", () => bridge.quitApp());
 }
 
 function bindSubscriptions() {
-  window.binancePanel.onSnapshot(renderSnapshot);
-  window.binancePanel.onEquityAlert(handleEquityAlert);
+  bridge.onSnapshot(renderSnapshot);
+  bridge.onEquityAlert(handleEquityAlert);
 }
 
 async function bootstrap() {
+  if (!bridge) {
+    throw new Error("binancePanel bridge is not available");
+  }
+
+  applyCapabilities();
   bindEvents();
   bindSubscriptions();
 
   const [settings, snapshot] = await Promise.all([
-    window.binancePanel.getSettings(),
-    window.binancePanel.getState()
+    bridge.getSettings(),
+    bridge.getState()
   ]);
 
   fillForm(settings);
   renderSnapshot(snapshot);
+  updatePositionModeButton();
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  dom.errorBanner.hidden = false;
+  dom.errorBanner.textContent = error.message || "初始化失败";
+});

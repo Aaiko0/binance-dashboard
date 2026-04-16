@@ -68,7 +68,7 @@
         <section class="hero-card">
           <div class="status-row">
             <span id="statusBadge" class="status-badge idle">等待配置</span>
-            <span id="statusMeta" class="status-meta">填入只读 API 后自动连接</span>
+            <span id="statusMeta" class="status-meta">填入只读 API 后开始同步</span>
           </div>
 
           <div class="headline-row">
@@ -228,12 +228,12 @@
           </div>
         </div>
 
-        <label class="toggle-row">
+        <label id="alwaysOnTopField" class="toggle-row">
           <span>窗口始终置顶</span>
           <input id="alwaysOnTopInput" name="alwaysOnTop" type="checkbox" />
         </label>
 
-        <div id="formStatus" class="form-status">真实提醒会在新的 5 分钟采样写入后判断；测试提醒会立即弹出和播放。</div>
+        <div id="formStatus" class="form-status">真实提醒会在新的 5 分钟采样写入后判定；测试提醒会立刻弹出和播放。</div>
 
         <div class="drawer-actions">
           <button id="saveButton" class="primary-button" type="submit">保存并连接</button>
@@ -242,6 +242,7 @@
       </form>
     </aside>
 
+    <script src="./web-bridge.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

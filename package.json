@@ -1,13 +1,15 @@
 {
   "name": "binance-position-panel",
   "version": "0.1.0",
-  "description": "Binance USDⓈ-M futures position panel desktop app",
+  "description": "Desktop and web panel for Binance USDⓈ-M futures positions and account equity.",
   "author": "OpenAI Codex",
   "private": true,
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
     "start": "electron .",
+    "web": "node web-server.js",
+    "web:open": "node scripts/open-web-panel.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -33,6 +35,13 @@
       "equity-history.html",
       "equity-history.css",
       "equity-history.js",
+      "web-bridge.js",
+      "web-history-bridge.js",
+      "web.html",
+      "web-history.html",
+      "scripts/**/*",
+      "网页版.cmd",
+      "网页版.vbs",
       "src/**/*",
       "package.json"
     ],

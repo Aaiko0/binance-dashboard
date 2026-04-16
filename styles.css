@@ -853,6 +853,25 @@ body.drawer-open .settings-drawer {
   display: none !important;
 }
 
+body.web-mode {
+  overflow: auto;
+}
+
+body.web-mode .app-shell {
+  width: min(388px, calc(100vw - 28px));
+  min-height: calc(100vh - 28px);
+  height: auto;
+  margin: 14px auto;
+}
+
+body.web-mode .content {
+  overflow: visible;
+}
+
+body.web-mode .positions-panel {
+  min-height: 300px;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;

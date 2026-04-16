@@ -2,17 +2,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
-const { ConfigStore, sanitizeSettings } = require("./src/main/configStore");
+const { ConfigStore } = require("./src/main/configStore");
 const { BinancePositionsService } = require("./src/main/binanceService");
 const { EquityAlertService } = require("./src/main/equityAlertService");
 const { EquityHistoryService } = require("./src/main/equityHistoryService");
+const { PanelRuntime } = require("./src/server/panelRuntime");
 
 let mainWindow = null;
 let historyWindow = null;
-let configStore = null;
-let positionsService = null;
-let equityHistoryService = null;
-let equityAlertService = null;
+let runtime = null;
 
 const startupLogPath = path.join(process.env.APPDATA || os.tmpdir(), "binance-position-panel", "startup.log");
 
@@ -25,24 +23,16 @@ function writeStartupLog(message) {
   }
 }
 
+function getCurrentSettings() {
+  return runtime ? runtime.getSettings() : { alwaysOnTop: true };
+}
+
 function broadcast(channel, payload) {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send(channel, payload);
+  for (const targetWindow of BrowserWindow.getAllWindows()) {
+    if (!targetWindow.isDestroyed()) {
+      targetWindow.webContents.send(channel, payload);
     }
   }
-}
-
-function broadcastSnapshot(snapshot) {
-  broadcast("panel:snapshot", snapshot);
-}
-
-function broadcastHistoryUpdate(historyPayload) {
-  broadcast("history:updated", historyPayload);
-}
-
-function broadcastEquityAlert(alertPayload) {
-  broadcast("alert:triggered", alertPayload);
 }
 
 function flashMainWindowTemporarily() {
@@ -59,44 +49,45 @@ function flashMainWindowTemporarily() {
 }
 
 function syncWindowAlwaysOnTop(alwaysOnTop) {
-  mainWindow?.setAlwaysOnTop(Boolean(alwaysOnTop), "screen-saver");
-  historyWindow?.setAlwaysOnTop(Boolean(alwaysOnTop), "screen-saver");
+  const nextValue = Boolean(alwaysOnTop);
+  mainWindow?.setAlwaysOnTop(nextValue, "screen-saver");
+  historyWindow?.setAlwaysOnTop(nextValue, "screen-saver");
 }
 
-function attachWindowLifecycle(window, label) {
-  window.on("ready-to-show", () => {
+function attachWindowLifecycle(targetWindow, label) {
+  targetWindow.on("ready-to-show", () => {
     writeStartupLog(`${label} ready-to-show`);
-    window.show();
-    window.focus();
+    targetWindow.show();
+    targetWindow.focus();
   });
 
-  window.on("show", () => {
+  targetWindow.on("show", () => {
     writeStartupLog(`${label} show`);
   });
 
-  window.on("closed", () => {
+  targetWindow.on("closed", () => {
     writeStartupLog(`${label} closed`);
-    if (window === mainWindow) {
+    if (targetWindow === mainWindow) {
       mainWindow = null;
     }
 
-    if (window === historyWindow) {
+    if (targetWindow === historyWindow) {
       historyWindow = null;
     }
   });
 
-  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+  targetWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
     writeStartupLog(`${label} did-fail-load code=${errorCode} desc=${errorDescription}`);
   });
 
-  window.webContents.on("render-process-gone", (_event, details) => {
+  targetWindow.webContents.on("render-process-gone", (_event, details) => {
     writeStartupLog(`${label} render-process-gone reason=${details.reason} exitCode=${details.exitCode}`);
   });
 }
 
 function createMainWindow() {
   writeStartupLog("createMainWindow begin");
-  const settings = configStore.load();
+  const settings = getCurrentSettings();
 
   mainWindow = new BrowserWindow({
     width: 354,
@@ -133,7 +124,7 @@ function createHistoryWindow() {
   }
 
   writeStartupLog("createHistoryWindow begin");
-  const settings = configStore.load();
+  const settings = getCurrentSettings();
 
   historyWindow = new BrowserWindow({
     width: 500,
@@ -163,20 +154,9 @@ function createHistoryWindow() {
   return historyWindow;
 }
 
-async function connectWithSavedSettings() {
-  const settings = configStore.load();
-  positionsService.hydrateFromSettings(settings);
-  equityHistoryService.noteSnapshot(settings, positionsService.getSnapshot());
-
-  if (settings.apiKey && settings.apiSecret) {
-    await positionsService.start(settings);
-  }
-}
-
 async function exportEquityHistory(intervalMinutes) {
-  const settings = configStore.load();
-  const exportData = equityHistoryService.exportHistoryCsv(settings, intervalMinutes);
-  const defaultDirectory = equityHistoryService.getStorageDirectory(settings);
+  const exportData = runtime.exportHistoryCsv(intervalMinutes);
+  const defaultDirectory = runtime.getHistoryStorageDirectory();
   const result = await dialog.showSaveDialog(historyWindow || mainWindow, {
     title: "导出净值历史",
     defaultPath: path.join(defaultDirectory, exportData.defaultFileName),
@@ -202,8 +182,7 @@ async function exportEquityHistory(intervalMinutes) {
 }
 
 async function openEquityHistoryFolder() {
-  const settings = configStore.load();
-  const directoryPath = equityHistoryService.getStorageDirectory(settings);
+  const directoryPath = runtime.getHistoryStorageDirectory();
   fs.mkdirSync(directoryPath, { recursive: true });
   const errorMessage = await shell.openPath(directoryPath);
   if (errorMessage) {
@@ -214,58 +193,25 @@ async function openEquityHistoryFolder() {
 }
 
 function registerIpc() {
-  ipcMain.handle("panel:get-settings", () => sanitizeSettings(configStore.load()));
-  ipcMain.handle("panel:get-state", () => positionsService.getSnapshot());
-
+  ipcMain.handle("panel:get-settings", () => runtime.getSettings());
+  ipcMain.handle("panel:get-state", () => runtime.getSnapshot());
   ipcMain.handle("panel:save-settings", async (_event, payload) => {
-    const settings = configStore.save(payload);
-    syncWindowAlwaysOnTop(settings.alwaysOnTop);
-
-    positionsService.hydrateFromSettings(settings);
-    equityHistoryService.noteSnapshot(settings, positionsService.getSnapshot());
-
-    if (settings.apiKey && settings.apiSecret) {
-      await positionsService.start(settings);
-    } else {
-      positionsService.stop({ emitSnapshot: true });
-    }
-
-    return {
-      settings: sanitizeSettings(settings),
-      snapshot: positionsService.getSnapshot()
-    };
+    const result = await runtime.saveSettings(payload);
+    syncWindowAlwaysOnTop(result.settings.alwaysOnTop);
+    return result;
   });
-
-  ipcMain.handle("panel:refresh", async () => {
-    const settings = configStore.load();
-    positionsService.hydrateFromSettings(settings);
-
-    if (settings.apiKey && settings.apiSecret) {
-      await positionsService.start(settings);
-    }
-
-    const snapshot = positionsService.getSnapshot();
-    equityHistoryService.noteSnapshot(settings, snapshot);
-    return snapshot;
-  });
-
+  ipcMain.handle("panel:refresh", () => runtime.refresh());
   ipcMain.handle("history:open-window", () => {
     createHistoryWindow();
     return true;
   });
-
-  ipcMain.handle("history:get-data", () => {
-    const settings = configStore.load();
-    return equityHistoryService.getHistory(settings, positionsService.getSnapshot());
-  });
-
+  ipcMain.handle("history:get-data", () => runtime.getHistory());
   ipcMain.handle("history:export", async (_event, payload = {}) => exportEquityHistory(payload.intervalMinutes));
-  ipcMain.handle("history:open-folder", async () => openEquityHistoryFolder());
-
-  ipcMain.handle("window:set-always-on-top", (_event, alwaysOnTop) => {
-    const settings = configStore.save({ alwaysOnTop: Boolean(alwaysOnTop) });
-    syncWindowAlwaysOnTop(settings.alwaysOnTop);
-    return sanitizeSettings(settings);
+  ipcMain.handle("history:open-folder", () => openEquityHistoryFolder());
+  ipcMain.handle("window:set-always-on-top", async (_event, alwaysOnTop) => {
+    const result = await runtime.saveSettings({ alwaysOnTop: Boolean(alwaysOnTop) });
+    syncWindowAlwaysOnTop(result.settings.alwaysOnTop);
+    return result.settings;
   });
 
   ipcMain.on("window:minimize", (event) => {
@@ -302,35 +248,31 @@ if (!singleInstanceLock) {
 
 app.whenReady().then(async () => {
   writeStartupLog("app ready");
-  configStore = new ConfigStore({ app, safeStorage });
-  positionsService = new BinancePositionsService();
-  equityHistoryService = new EquityHistoryService({ app });
-  equityAlertService = new EquityAlertService();
-  equityHistoryService.start();
 
-  positionsService.on("snapshot", (snapshot) => {
-    const settings = configStore.load();
-    equityHistoryService.noteSnapshot(settings, snapshot);
-    broadcastSnapshot(snapshot);
+  runtime = new PanelRuntime({
+    configStore: new ConfigStore({ app, safeStorage }),
+    positionsService: new BinancePositionsService(),
+    equityHistoryService: new EquityHistoryService({ app }),
+    equityAlertService: new EquityAlertService()
   });
 
-  equityHistoryService.on("history-updated", (historyPayload) => {
-    broadcastHistoryUpdate(historyPayload);
+  runtime.on("snapshot", (snapshot) => {
+    broadcast("panel:snapshot", snapshot);
+  });
 
-    const settings = configStore.load();
-    const alertPayload = equityAlertService.evaluate(settings, historyPayload);
-    if (!alertPayload) {
-      return;
-    }
+  runtime.on("history-updated", (historyPayload) => {
+    broadcast("history:updated", historyPayload);
+  });
 
+  runtime.on("alert", (alertPayload) => {
     flashMainWindowTemporarily();
-    broadcastEquityAlert(alertPayload);
+    broadcast("alert:triggered", alertPayload);
   });
 
   registerIpc();
+  await runtime.start();
   createMainWindow();
-  await connectWithSavedSettings();
-  writeStartupLog("connectWithSavedSettings done");
+  writeStartupLog("runtime started");
 });
 
 app.on("second-instance", () => {
@@ -351,10 +293,9 @@ app.on("activate", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", async () => {
   writeStartupLog("before-quit");
-  positionsService?.dispose();
-  equityHistoryService?.dispose();
+  await runtime?.dispose();
 });
 
 app.on("window-all-closed", () => {
